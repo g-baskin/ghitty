@@ -215,4 +215,4 @@ Bun.serve({
   },
 });
 
-console.log(`Repo Finder running at http://localhost:${port}`);
+console.log(`Ghitty running at http://localhost:${port}`);

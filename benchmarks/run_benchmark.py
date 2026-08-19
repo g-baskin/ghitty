@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the three-topic Repo Finder benchmark and save reproducible JSON."""
+"""Run the three-topic Ghitty benchmark and save reproducible JSON."""
 
 import json
 import os

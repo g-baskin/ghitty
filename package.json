@@ -1,5 +1,5 @@
 {
-  "name": "repo-finder-web",
+  "name": "ghitty",
   "description": "Recall-first GitHub repository discovery with metadata and code evidence",
   "license": "AGPL-3.0-only",
   "private": true,

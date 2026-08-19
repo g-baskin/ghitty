@@ -1,4 +1,4 @@
-# Repo Finder interface
+# Ghitty interface
 
 ## Design read
 

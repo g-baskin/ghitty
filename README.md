@@ -1,8 +1,8 @@
-# Repo Finder
+# Ghitty
 
 Recall-first GitHub repository discovery using OpenAI-compatible structured outputs, adaptive query expansion, GitHub Search, and code evidence from Ken's Grep MCP.
 
-![Repo Finder scanning a network of software repositories for evidence-backed matches](assets/repo-finder-hero.png)
+![Ghitty scanning a network of software repositories for evidence-backed matches](assets/ghitty-hero.png)
 
 ## Run the local web app
 
@@ -64,4 +64,4 @@ python3 -m unittest discover -s tests -v
 
 ## License
 
-Repo Finder is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). Network deployments of modified versions must offer their corresponding source code to users.
+Ghitty is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). Network deployments of modified versions must offer their corresponding source code to users.

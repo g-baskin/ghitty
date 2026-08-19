@@ -3,7 +3,7 @@ requires = ["setuptools>=61,<76"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "repo-finder"
+name = "ghitty"
 version = "0.1.0"
 description = "Recall-first GitHub repository discovery with metadata and code evidence"
 license = { file = "LICENSE" }
@@ -11,7 +11,7 @@ requires-python = ">=3.9"
 dependencies = ["openai==2.48.0"]
 
 [project.scripts]
-repo-finder = "repo_finder:main"
+ghitty = "repo_finder:main"
 
 [tool.setuptools]
 py-modules = ["repo_finder"]

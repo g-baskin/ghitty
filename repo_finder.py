@@ -257,7 +257,7 @@ def github_search(query: str, per_query: int, token: Optional[str]) -> List[Cand
     params = urlencode({"q": normalized_query, "per_page": per_query})
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "repo-finder/0.1",
+        "User-Agent": "ghitty/0.1",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     if token:

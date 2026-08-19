@@ -14,7 +14,7 @@ Runtime setup, supported entry points, unit-test boundaries, and benchmark opera
 
 ## Runtime setup and entry points
 
-The project combines Python 3.9+ with Bun. Python installs one runtime dependency, `openai==2.48.0`, and exposes the `repo-finder` console script (`pyproject.toml:5-17`). Bun serves the local UI with `bun run start`; `bun run dev` watches `server.ts` (`package.json:7-16`). The full installation and credential startup commands are maintained in `README.md:5-45`.
+The project combines Python 3.9+ with Bun. Python installs one runtime dependency, `openai==2.48.0`, and exposes the `ghitty` console script (`pyproject.toml:5-17`). Bun serves the local UI with `bun run start`; `bun run dev` watches `server.ts` (`package.json:7-16`). The full installation and credential startup commands are maintained in `README.md:5-45`.
 
 The CLI accepts a topic plus `--results-per-query` (1–100, default 25), `--top` (1–50, default 10), optional `--model`, and optional `--grep-evidence` (`repo_finder.py:444-451`). Progress is written to stderr and the final document to stdout (`repo_finder.py:402-440`, `repo_finder.py:454-466`).
 

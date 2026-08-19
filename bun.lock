@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "repo-finder-web",
+      "name": "ghitty",
       "devDependencies": {
         "@biomejs/biome": "2.5.9",
         "@types/bun": "1.3.14",
