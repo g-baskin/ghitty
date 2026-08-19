@@ -13,6 +13,85 @@ class RepoFinderTests(unittest.TestCase):
         self.assertEqual(repo_finder.normalize_query(" diffusion "), "diffusion fork:false")
         self.assertEqual(repo_finder.normalize_query("diffusion fork:true"), "diffusion fork:false")
 
+    def test_create_search_plan_preserves_request_and_builds_explicit_intent(self):
+        request = "I want to create video images"
+        response = {
+            "interpretations": ["  Generate still images for video production  "],
+            "technical_concepts": ["text-to-image", "storyboard generation"],
+            "github_queries": [
+                "text to image generation",
+                "storyboard image generator",
+                "video thumbnail generator",
+                "keyframe image synthesis",
+                "diffusion image pipeline",
+                "prompt to image SDK",
+                "video previsualization tool",
+                "image generation UI",
+            ],
+            "code_probes": ["from diffusers import DiffusionPipeline", "StableDiffusionPipeline(", "model_index.json"],
+        }
+        with patch("repo_finder.model_json", return_value=response) as model_json:
+            plan = repo_finder.create_search_plan(request, "test/model")
+
+        self.assertEqual(plan["original_request"], request)
+        self.assertEqual(plan["interpretations"], ["Generate still images for video production"])
+        self.assertEqual(plan["technical_concepts"], ["text-to-image", "storyboard generation"])
+        self.assertTrue(all(query.endswith("fork:false") for query in plan["github_queries"]))
+        self.assertEqual(plan["code_probes"], response["code_probes"])
+        self.assertIn("everyday request", model_json.call_args.args[0])
+        self.assertIs(model_json.call_args.args[1], repo_finder.INTENT_SEARCH_PLAN_SCHEMA)
+
+    def test_create_search_plan_rejects_invalid_github_syntax(self):
+        response = {
+            "interpretations": ["Generate images"],
+            "technical_concepts": ["text-to-image"],
+            "github_queries": ["(diffusion OR image) OR video"] * 8,
+            "code_probes": ["DiffusionPipeline(", "model_index.json", "torch.inference_mode("],
+        }
+        with patch("repo_finder.model_json", return_value=response):
+            with self.assertRaisesRegex(repo_finder.RepoFinderError, "unsupported syntax"):
+                repo_finder.create_search_plan("I want to create video images", None)
+
+    def test_run_rejects_malformed_adaptive_query_before_second_api_call(self):
+        plan = {
+            "original_request": "request",
+            "interpretations": ["meaning"],
+            "technical_concepts": ["concept"],
+            "github_queries": ["concept fork:false"],
+            "code_probes": ["Concept("],
+        }
+        candidate = repo_finder.Candidate(
+            "owner/repo", "https://github.com/owner/repo", "desc", "Python", False, "", [], 0
+        )
+        adaptive_response = {"github_queries": ["(bad OR query) OR extra"], "reason": "new path"}
+        with patch("repo_finder.create_search_plan", return_value=plan), patch(
+            "repo_finder.fetch_queries", return_value=([candidate], {})
+        ) as fetch_queries, patch("repo_finder.model_json", return_value=adaptive_response):
+            with self.assertRaisesRegex(repo_finder.RepoFinderError, "unsupported syntax"):
+                repo_finder.run("request", 1, 1, None, None)
+
+        fetch_queries.assert_called_once_with(plan["github_queries"], 1)
+
+    def test_run_reports_static_evidence_not_provided(self):
+        plan = {
+            "original_request": "request",
+            "interpretations": ["meaning"],
+            "technical_concepts": ["concept"],
+            "github_queries": ["concept fork:false"],
+            "code_probes": ["Concept("],
+        }
+        with patch("repo_finder.create_search_plan", return_value=plan), patch(
+            "repo_finder.fetch_queries", return_value=([], {})
+        ), patch("repo_finder.rank_candidates", return_value=[]), patch("sys.stderr") as stderr:
+            result = repo_finder.run("request", 1, 1, None, None)
+
+        self.assertEqual(result["original_request"], "request")
+        self.assertEqual(result["search_plan"], plan)
+        self.assertEqual(result["static_evidence"], {"status": "not-provided", "candidate_count": 0})
+        self.assertTrue(
+            any("Static code evidence not provided" in str(call) for call in stderr.write.call_args_list)
+        )
+
     def test_github_search_ignores_forks_and_preserves_archived(self):
         payload = {
             "items": [
