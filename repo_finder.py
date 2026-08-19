@@ -26,6 +26,7 @@ DEFAULT_OPENROUTER_MODEL = "openai/gpt-oss-120b"
 MAX_MODEL_OUTPUT_TOKENS = 4096
 MAX_TOPIC_LENGTH = 200
 MAX_QUERY_LENGTH = 256
+MAX_RANKING_CANDIDATES = 100
 REPOSITORY_NAME_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 
 INTENT_SEARCH_PLAN_SCHEMA: Dict[str, Any] = {
@@ -230,6 +231,12 @@ def model_json(prompt: str, schema: Mapping[str, Any], model: Optional[str]) -> 
                 502: "the selected model is temporarily unavailable",
                 503: "no provider currently satisfies the model requirements",
             }.get(exc.status_code, f"request rejected with HTTP {exc.status_code}")
+            if exc.status_code == 400 and exc.response is not None:
+                try:
+                    body = exc.response.json()
+                    detail += f" ({body.get('error', {}).get('message', '') or body})"
+                except (ValueError, AttributeError, KeyError):
+                    pass
             raise RepoFinderError(f"OpenRouter request failed: {detail}") from exc
         raise RepoFinderError(f"OpenAI request failed with HTTP {exc.status_code}") from exc
     except APIError as exc:
@@ -504,7 +511,9 @@ def run(topic: str, per_query: int, top: int, model: Optional[str], grep_evidenc
         static_evidence = {"status": "no-matches", "candidate_count": 0}
         print("Static code evidence file contained no matches for this request", file=sys.stderr)
     merged = list(merge_candidates([*first, *second, *grep_candidates]).values())
-    picks = rank_candidates(topic, merged, top, model)
+    if len(merged) > MAX_RANKING_CANDIDATES:
+        print(f"Capping {len(merged)} candidates to {MAX_RANKING_CANDIDATES} for ranking", file=sys.stderr)
+    picks = rank_candidates(topic, merged[:MAX_RANKING_CANDIDATES], top, model)
     return {
         "original_request": topic,
         "topic": topic,
