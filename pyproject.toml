@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "repo-finder"
 version = "0.1.0"
 description = "Recall-first GitHub repository discovery with metadata and code evidence"
+license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = ["openai==2.48.0"]
 
