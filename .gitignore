@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+*.py[cod]
+.env
+.gg/screenshots/
+.gg/uploads/
+.pytest_cache/
+.venv/
+benchmark-results/
+node_modules/

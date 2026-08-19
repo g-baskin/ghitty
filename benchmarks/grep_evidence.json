@@ -1,0 +1,56 @@
+{
+  "image generation": [
+    {
+      "full_name": "mosecorg/mosec",
+      "url": "https://github.com/mosecorg/mosec/blob/ff87e2fa04571673da99201fbfe88977501a462c/examples/stable_diffusion/server.py#L18-L21",
+      "probe": "from diffusers import StableDiffusionPipeline",
+      "snippet": "import torch; from diffusers import StableDiffusionPipeline; from mosec import Server, Worker"
+    },
+    {
+      "full_name": "aws-neuron/aws-neuron-samples",
+      "url": "https://github.com/aws-neuron/aws-neuron-samples/blob/03e84c5b2a7e5aed687b131e0bb19160bb8c8bc3/torch-neuronx/training/stable_diffusion/sd_training_neuron.py#L45-L52",
+      "probe": "from diffusers import StableDiffusionPipeline",
+      "snippet": "from diffusers import StableDiffusionPipeline"
+    },
+    {
+      "full_name": "intellerce/controlanimate",
+      "url": "https://github.com/intellerce/controlanimate/blob/dbbd44a3255ae591d7612e6e293b44f612558aaf/modules/ip_adapter.py#L3-L10",
+      "probe": "from diffusers import StableDiffusionPipeline",
+      "snippet": "from diffusers import StableDiffusionPipeline; from diffusers.pipelines.controlnet import MultiControlNetModel"
+    }
+  ],
+  "llm agent orchestration": [
+    {
+      "full_name": "bkdevs/async-server",
+      "url": "https://github.com/bkdevs/async-server/blob/d743728b88eb802181595b6a7a13d61b829f56b2/src/agent/agent_metadata.py#L5-L12",
+      "probe": "from langgraph.prebuilt import create_react_agent",
+      "snippet": "from langgraph.graph.graph import CompiledGraph; from langgraph.prebuilt import create_react_agent"
+    },
+    {
+      "full_name": "drfccv/deer-flow-cn",
+      "url": "https://github.com/drfccv/deer-flow-cn/blob/e68959e60a6324efc95dab668d3d996e28d5409b/src/agents/agents.py#L1-L8",
+      "probe": "from langgraph.prebuilt import create_react_agent",
+      "snippet": "from langgraph.prebuilt import create_react_agent; from src.prompts import apply_prompt_template"
+    },
+    {
+      "full_name": "the-omics-os/lobster",
+      "url": "https://github.com/the-omics-os/lobster/blob/d198396446bb86946ce22c41268f9230dbe1edde/lobster/agents/graph.py#L20-L27",
+      "probe": "from langgraph.prebuilt import create_react_agent",
+      "snippet": "from langgraph.graph import END, START, StateGraph; from langgraph.prebuilt import create_react_agent"
+    }
+  ],
+  "splunk/cribl pipeline tooling": [
+    {
+      "full_name": "criblio/helm-charts",
+      "url": "https://github.com/criblio/helm-charts/blob/5b65b5212df624fc8e5c5417f56fa4ae6a228e09/helm-chart-sources/edge/values.yaml#L50-L59",
+      "probe": "CRIBL_DIST_MASTER_URL",
+      "snippet": "cribl: home: /opt/cribl; existingSecretForLeader; CRIBL_DIST_MASTER_URL"
+    },
+    {
+      "full_name": "lsmithg12/ai-detection-engineering",
+      "url": "https://github.com/lsmithg12/ai-detection-engineering/blob/0ea0c97f45a3e8b4bc61f5d96c36b13c3fa92f7c/docker-compose.yml#L142-L150",
+      "probe": "CRIBL_DIST_MASTER_URL",
+      "snippet": "image: cribl/cribl:latest; CRIBL_DIST_MASTER_URL=; CRIBL_ADMIN_PASSWORD=admin"
+    }
+  ]
+}

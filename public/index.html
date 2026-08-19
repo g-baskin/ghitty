@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="Recall-first repository discovery with visible search evidence." />
+    <title>Repo Finder</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to search</a>
+    <header class="site-header">
+      <div class="rail header-inner">
+        <a class="brand" href="/" aria-label="Repo Finder home">
+          <span class="brand-mark" aria-hidden="true">RF</span>
+          <span>Repo Finder</span>
+        </a>
+        <p class="header-note">Recall first. Evidence attached.</p>
+      </div>
+    </header>
+
+    <main id="main" class="rail">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="context">Repository discovery</p>
+        <h1 id="page-title">Search beyond the obvious.</h1>
+        <p class="lede">
+          Expand one topic across languages, implementation terms, and adjacent ecosystems. Every
+          recommendation shows how it was found.
+        </p>
+      </section>
+
+      <section class="workbench" aria-label="Repository search">
+        <form id="search-form" class="search-panel">
+          <div class="field">
+            <label for="topic">What are you looking for?</label>
+            <div class="search-row">
+              <input
+                id="topic"
+                name="topic"
+                type="search"
+                minlength="1"
+                maxlength="200"
+                autocomplete="off"
+                required
+                aria-describedby="topic-help form-error"
+                placeholder="Example: local-first database sync"
+              />
+              <button id="submit-button" class="primary-button" type="submit">Search repos</button>
+            </div>
+            <p id="topic-help" class="field-help">
+              Searches GitHub metadata and code evidence. Forks are excluded; archived projects stay eligible.
+            </p>
+            <p id="form-error" class="form-error" role="alert"></p>
+          </div>
+
+          <fieldset class="examples">
+            <legend>Try:</legend>
+            <button type="button" data-topic="image generation">image generation</button>
+            <button type="button" data-topic="llm agent orchestration">LLM agent orchestration</button>
+            <button type="button" data-topic="splunk/cribl pipeline tooling">Splunk / Cribl tooling</button>
+          </fieldset>
+        </form>
+
+        <aside class="evidence-guide" aria-labelledby="evidence-title">
+          <h2 id="evidence-title">What gets searched</h2>
+          <dl>
+            <div>
+              <dt>Metadata</dt>
+              <dd>Names, descriptions, topics, and README language.</dd>
+            </div>
+            <div>
+              <dt>Code</dt>
+              <dd>Imports, symbols, filenames, and configuration keys.</dd>
+            </div>
+            <div>
+              <dt>Expansion</dt>
+              <dd>Synonyms, native scripts, adjacent roles, and discovered vocabulary.</dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section id="activity" class="activity" hidden aria-labelledby="activity-title">
+        <div class="section-heading">
+          <div>
+            <p class="context">Live search</p>
+            <h2 id="activity-title">Working through the evidence</h2>
+          </div>
+          <button id="cancel-button" class="secondary-button" type="button">Cancel search</button>
+        </div>
+        <p id="live-status" class="live-status" role="status" aria-live="polite"></p>
+        <ol id="progress-list" class="progress-list" aria-label="Search progress"></ol>
+      </section>
+
+      <section id="results-section" class="results-section" hidden aria-labelledby="results-title">
+        <div class="section-heading results-heading">
+          <div>
+            <p class="context">Ranked evidence</p>
+            <h2 id="results-title">Repository results</h2>
+          </div>
+          <p id="result-count" class="result-count"></p>
+        </div>
+        <div id="results" class="results"></div>
+      </section>
+
+      <section id="empty-state" class="empty-state" aria-labelledby="empty-title">
+        <h2 id="empty-title">One query becomes many search paths.</h2>
+        <p>
+          Start with a concept, acronym, product category, or implementation problem. Repo Finder keeps
+          low-star, multilingual, stale, and archived work visible when the evidence is relevant.
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="rail footer-inner">
+        <span>Local prototype</span>
+        <span>GitHub + Ken's Grep MCP evidence</span>
+      </div>
+    </footer>
+  </body>
+</html>
