@@ -2,6 +2,8 @@
 
 Recall-first GitHub repository discovery using OpenAI-compatible structured outputs, adaptive query expansion, GitHub Search, and code evidence from Ken's Grep MCP.
 
+![Repo Finder scanning a network of software repositories for evidence-backed matches](assets/repo-finder-hero.png)
+
 ## Run the local web app
 
 Install both runtimes once:
