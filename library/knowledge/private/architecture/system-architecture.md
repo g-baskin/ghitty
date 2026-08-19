@@ -26,7 +26,7 @@ flowchart LR
     Bun -->|events and result| Browser
 ```
 
-The Python module is the discovery engine and CLI. It expands a topic, performs GitHub searches, optionally merges imported Grep evidence, adapts the query set, and asks the selected model to rank candidates (`repo_finder.py:227-241`, `repo_finder.py:402-441`).
+The Python module is the discovery engine and CLI. It creates an intent/search plan, performs GitHub searches, optionally merges imported Grep evidence, adapts the query set, and asks the selected model to rank candidates (`repo_finder.py:264-295`, `repo_finder.py:409-481`).
 
 The Bun server is a local process boundary rather than a second search implementation. It validates requests, starts the Python CLI, translates stderr lines into progress events, parses stdout as the final result, and serves three static assets (`server.ts:81-118`, `server.ts:189-216`). Jobs and subscribers exist only in the server process (`server.ts:11-22`).
 
@@ -34,7 +34,7 @@ The browser creates a job, follows its event stream, renders ranked evidence usi
 
 ## Data and trust boundaries
 
-- Model schemas constrain expansion, adaptive-query, and ranking responses; candidate metadata and snippets are explicitly labeled untrusted in ranking prompts (`repo_finder.py:30-72`, `repo_finder.py:329-345`, `repo_finder.py:383-399`).
+- Model schemas constrain intent/search-plan creation, adaptive queries, and ranking responses; candidate metadata and snippets are explicitly labeled untrusted in ranking prompts (`repo_finder.py:31-77`, `repo_finder.py:409-425`, `repo_finder.py:463-481`).
 - GitHub and model traffic leaves the local machine; the browser talks only to the loopback Bun server, whose hostname is fixed to `127.0.0.1` (`server.ts:195-199`).
 - Grep evidence is a checked-in JSON import boundary for this prototype, not a live MCP call (`README.md:53-55`, `repo_finder.py:348-380`).
 - The server bounds request bodies at 4 KB and process output at 5 MB and applies CSP, referrer, and MIME-sniffing headers (`server.ts:7-9`, `server.ts:24-29`, `server.ts:52-78`, `server.ts:121-145`).

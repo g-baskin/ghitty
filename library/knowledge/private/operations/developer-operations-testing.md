@@ -23,11 +23,13 @@ The CLI accepts a topic plus `--results-per-query` (1–100, default 25), `--top
 The Python suite uses `unittest`, although the repository-level test command is `python3 -m unittest discover -s tests -v` (`tests/test_repo_finder.py:1-8`, `README.md:57-61`). Tests cover:
 
 - query normalization and fork exclusion;
+- intent/search-plan creation preserving the original request and technical concepts, and rejecting invalid GitHub query syntax (`validate_github_query`);
 - archived-result preservation and provenance merging;
 - GitHub rate-limit waiting and invalid-token fallback;
 - Grep row validation and snippet bounds;
+- static evidence reporting and adaptive query validation;
 - provider credential requirements and OpenRouter SDK configuration;
-- oversized-topic rejection before network access (`tests/test_repo_finder.py:11-133`).
+- oversized-topic rejection before network access (`tests/test_repo_finder.py:11-316`).
 
 The tests mock external requests and SDK calls. They do not exercise the Bun API, SSE replay/cancellation, browser rendering, live GitHub/model integrations, or accessibility behavior. `DESIGN.md:26-28` also records browser and accessibility checks as unverified.
 
