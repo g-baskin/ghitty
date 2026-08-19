@@ -23,6 +23,7 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENAI_MODEL = "gpt-5.6"
 DEFAULT_OPENROUTER_MODEL = "~openai/gpt-latest"
+MAX_MODEL_OUTPUT_TOKENS = 4096
 MAX_TOPIC_LENGTH = 200
 MAX_QUERY_LENGTH = 256
 REPOSITORY_NAME_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -192,6 +193,7 @@ def model_json(prompt: str, schema: Mapping[str, Any], model: Optional[str]) -> 
     request: Dict[str, Any] = {
         "model": resolved_model,
         "messages": [{"role": "user", "content": prompt}],
+        "max_completion_tokens": MAX_MODEL_OUTPUT_TOKENS,
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "repo_finder", "strict": True, "schema": schema},
@@ -205,7 +207,7 @@ def model_json(prompt: str, schema: Mapping[str, Any], model: Optional[str]) -> 
         if provider == "openrouter":
             detail = {
                 401: "the API key is invalid or disabled",
-                402: "the account or API key has insufficient credits; add OpenRouter credits and retry",
+                402: "the account balance or API-key spending limit cannot cover the request",
                 403: "the API key lacks permission or a guardrail blocked the request",
                 408: "the request timed out",
                 429: "the account or provider is rate limited; retry later",

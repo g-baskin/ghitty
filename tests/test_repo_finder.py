@@ -126,6 +126,7 @@ class RepoFinderTests(unittest.TestCase):
         self.assertEqual(sdk.call_args.kwargs["base_url"], repo_finder.OPENROUTER_BASE_URL)
         request = client.chat.completions.create.call_args.kwargs
         self.assertEqual(request["model"], "test/model")
+        self.assertEqual(request["max_completion_tokens"], repo_finder.MAX_MODEL_OUTPUT_TOKENS)
         self.assertTrue(request["response_format"]["json_schema"]["strict"])
         self.assertTrue(request["extra_body"]["provider"]["require_parameters"])
 
@@ -140,7 +141,7 @@ class RepoFinderTests(unittest.TestCase):
         client.chat.completions.create.side_effect = error
         environment = {"REPO_FINDER_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "test-key"}
         with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
-            with self.assertRaisesRegex(repo_finder.RepoFinderError, "insufficient credits"):
+            with self.assertRaisesRegex(repo_finder.RepoFinderError, "spending limit"):
                 repo_finder.model_json("prompt", {"type": "object"}, "test/model")
 
     def test_main_rejects_oversized_topic_before_network(self):
