@@ -48,7 +48,7 @@ A nonzero worker exit uses the final stderr line as the error when available. Pa
 - `GET /`, `/settings`, `/settings/`, `/app.js`, `/settings.js`, `/styles.css` — fixed static allowlist.
 - `GET /api/models` — return the approved model catalog and default.
 - `POST /api/jobs` — validate the topic and model, then create a search.
-- `GET /api/jobs/{id}/events` — subscribe/replay (`server.ts:250-254`).
-- `DELETE /api/jobs/{id}` — cancel active work (`server.ts:250-255`).
+- `GET /api/jobs/{id}/events` — subscribe/replay (`server.ts:251-255`).
+- `DELETE /api/jobs/{id}` — cancel active work (`server.ts:251-256`).
 
-Unknown paths return 404 and unsupported methods on a known job path return 405 (`server.ts:250-256`).
+Unknown paths return 404 and unsupported methods on a known job path return 405 (`server.ts:251-257`).
