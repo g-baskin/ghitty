@@ -226,6 +226,7 @@ function cancelJob(job: Job): Response {
 const staticFiles = new Map<string, readonly [string, string]>([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/settings", ["settings.html", "text/html; charset=utf-8"]],
+  ["/settings/", ["settings.html", "text/html; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
   ["/settings.js", ["settings.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],

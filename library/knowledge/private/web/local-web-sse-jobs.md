@@ -45,7 +45,7 @@ A nonzero worker exit uses the final stderr line as the error when available. Pa
 
 ## HTTP surface
 
-- `GET /`, `/settings`, `/app.js`, `/settings.js`, `/styles.css` — fixed static allowlist.
+- `GET /`, `/settings`, `/settings/`, `/app.js`, `/settings.js`, `/styles.css` — fixed static allowlist.
 - `GET /api/models` — return the approved model catalog and default.
 - `POST /api/jobs` — validate the topic and model, then create a search.
 - `GET /api/jobs/{id}/events` — subscribe/replay (`server.ts:250-254`).
