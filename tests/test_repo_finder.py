@@ -129,6 +129,20 @@ class RepoFinderTests(unittest.TestCase):
         self.assertTrue(request["response_format"]["json_schema"]["strict"])
         self.assertTrue(request["extra_body"]["provider"]["require_parameters"])
 
+    def test_model_json_explains_openrouter_credit_failures(self):
+        import httpx
+        from openai import APIStatusError
+
+        request = httpx.Request("POST", repo_finder.OPENROUTER_BASE_URL)
+        response = httpx.Response(402, request=request)
+        error = APIStatusError("Payment required", response=response, body={"error": {"code": 402}})
+        client = Mock()
+        client.chat.completions.create.side_effect = error
+        environment = {"REPO_FINDER_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "test-key"}
+        with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
+            with self.assertRaisesRegex(repo_finder.RepoFinderError, "insufficient credits"):
+                repo_finder.model_json("prompt", {"type": "object"}, "test/model")
+
     def test_main_rejects_oversized_topic_before_network(self):
         self.assertEqual(repo_finder.main(["x" * 201]), 2)
 

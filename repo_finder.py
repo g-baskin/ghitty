@@ -178,7 +178,7 @@ def model_json(prompt: str, schema: Mapping[str, Any], model: Optional[str]) -> 
     if not api_key:
         raise RepoFinderError(f"{key_name} is required for the {provider} provider")
     try:
-        from openai import APIError, OpenAI
+        from openai import APIError, APIStatusError, OpenAI
     except ImportError as exc:
         raise RepoFinderError("Install the pinned OpenAI SDK with: pip install .") from exc
 
@@ -201,6 +201,19 @@ def model_json(prompt: str, schema: Mapping[str, Any], model: Optional[str]) -> 
         request["extra_body"] = {"provider": {"require_parameters": True}}
     try:
         completion = client.chat.completions.create(**request)
+    except APIStatusError as exc:
+        if provider == "openrouter":
+            detail = {
+                401: "the API key is invalid or disabled",
+                402: "the account or API key has insufficient credits; add OpenRouter credits and retry",
+                403: "the API key lacks permission or a guardrail blocked the request",
+                408: "the request timed out",
+                429: "the account or provider is rate limited; retry later",
+                502: "the selected model is temporarily unavailable",
+                503: "no provider currently satisfies the model requirements",
+            }.get(exc.status_code, f"request rejected with HTTP {exc.status_code}")
+            raise RepoFinderError(f"OpenRouter request failed: {detail}") from exc
+        raise RepoFinderError(f"OpenAI request failed with HTTP {exc.status_code}") from exc
     except APIError as exc:
         raise RepoFinderError(f"{provider} model request failed: {type(exc).__name__}") from exc
     content = completion.choices[0].message.content if completion.choices else None
