@@ -4,6 +4,12 @@ Recall-first GitHub repository discovery using OpenAI-compatible structured outp
 
 ![Ghitty scanning a network of software repositories for evidence-backed matches](assets/ghitty-hero.png)
 
+## How Ghitty searches
+
+One topic fans out across languages, metadata, adjacent ecosystems, and code evidence before Ghitty ranks the strongest matches.
+
+![Ghitty expanding a query into broad search paths and converging on evidence-backed repository matches](assets/ghitty-search-pipeline.png)
+
 ## Run the local web app
 
 Install both runtimes once:
