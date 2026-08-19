@@ -40,7 +40,7 @@ export OPENAI_API_KEY='...'
 # export REPO_FINDER_MODEL='~openai/gpt-latest'
 
 export GITHUB_TOKEN='...' # optional, but recommended
-python3 repo_finder.py "image generation" \
+ghitty "image generation" \
   --grep-evidence benchmarks/grep_evidence.json
 ```
 
