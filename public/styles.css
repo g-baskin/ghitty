@@ -37,7 +37,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -107,7 +108,29 @@ a {
   letter-spacing: -0.04em;
 }
 
-.header-note,
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.site-nav a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-nav a:hover,
+.site-nav a[aria-current="page"] {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
 .field-help,
 .result-count,
 .site-footer {
@@ -187,7 +210,8 @@ h1 {
   gap: 10px;
 }
 
-input[type="search"] {
+input[type="search"],
+select {
   width: 100%;
   min-height: 52px;
   border: 1px solid var(--line-strong);
@@ -201,15 +225,21 @@ input[type="search"] {
     box-shadow var(--duration) var(--ease);
 }
 
+select {
+  padding-inline-end: 44px;
+}
+
 input[type="search"]::placeholder {
   color: #737068;
 }
 
-input[type="search"]:hover {
+input[type="search"]:hover,
+select:hover {
   border-color: var(--ink);
 }
 
 input[type="search"]:focus-visible,
+select:focus-visible,
 button:focus-visible,
 a:focus-visible {
   outline: 3px solid var(--accent);
@@ -259,6 +289,24 @@ button:disabled {
 .field-help {
   margin: 10px 0 0;
   line-height: 1.5;
+}
+
+.model-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.model-choice strong {
+  color: var(--ink);
+}
+
+.model-choice a {
+  color: var(--accent);
+  text-underline-offset: 3px;
 }
 
 .form-error {
@@ -504,6 +552,102 @@ button:disabled {
   line-height: 1.65;
 }
 
+.settings-main {
+  min-height: calc(100vh - 129px);
+  padding-block: 64px 80px;
+}
+
+.settings-intro {
+  max-width: 760px;
+}
+
+.settings-panel {
+  max-width: 760px;
+  margin-top: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 28px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.settings-panel label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-panel select {
+  width: 100%;
+  min-height: 52px;
+}
+
+.model-details {
+  margin-top: 28px;
+  border-block: 1px solid var(--line);
+  padding-block: 24px;
+}
+
+.model-details h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.model-details > p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.model-details dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 22px 0 0;
+}
+
+.model-details dl > div {
+  min-width: 0;
+}
+
+.model-details dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.model-details dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.model-details code {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.settings-status {
+  min-height: 24px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.settings-status.error {
+  color: var(--danger);
+}
+
 .site-footer {
   border-top: 1px solid var(--line);
 }
@@ -511,10 +655,6 @@ button:disabled {
 @media (max-width: 760px) {
   .rail {
     width: min(100% - 28px, var(--rail));
-  }
-
-  .header-note {
-    display: none;
   }
 
   .intro {
@@ -560,6 +700,19 @@ button:disabled {
     font-size: 12px;
   }
 
+  .settings-main {
+    padding-block: 48px 60px;
+  }
+
+  .settings-panel {
+    margin-top: 30px;
+    padding: 22px;
+  }
+
+  .model-details dl {
+    grid-template-columns: 1fr;
+  }
+
   .footer-inner {
     align-items: start;
     flex-direction: column;
@@ -571,6 +724,7 @@ button:disabled {
 
 @media (prefers-reduced-motion: reduce) {
   input[type="search"],
+  select,
   .primary-button,
   .secondary-button {
     transition-duration: 0.01ms;
@@ -582,7 +736,9 @@ button:disabled {
   .badge,
   .primary-button,
   .secondary-button,
-  input[type="search"] {
+  input[type="search"],
+  select,
+  .settings-panel {
     border: 1px solid CanvasText;
   }
 

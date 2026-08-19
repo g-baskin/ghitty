@@ -29,7 +29,9 @@ OPENROUTER_API_KEY="$(security find-generic-password -a "$USER" -s repo-finder-o
   PORT=3001 bun run start
 ```
 
-Open <http://localhost:3001>. For a simpler setup, copy `.env.example` to `.env` and add the key there; `.env` is gitignored but remains plaintext.
+Open <http://localhost:3001>. Choose a model at <http://localhost:3001/settings>; the non-sensitive preference stays in browser storage. For a simpler setup, copy `.env.example` to `.env` and add the key there; `.env` is gitignored but remains plaintext.
+
+Ghitty defaults to `openai/gpt-oss-120b`, the cheapest model that passed all three live strict-JSON planning checks. OpenRouter listed it at $0.03/M input tokens and $0.17/M output tokens on 2026-08-18. The settings page also offers faster `google/gemini-2.5-flash-lite` and higher-quality `openai/gpt-5-mini`; verify current prices before production use.
 
 ## Run one CLI search
 
@@ -43,7 +45,7 @@ export OPENAI_API_KEY='...'
 # Or OpenRouter through the same OpenAI SDK
 # export OPENROUTER_API_KEY='...'
 # export REPO_FINDER_PROVIDER='openrouter'
-# export REPO_FINDER_MODEL='~openai/gpt-latest'
+# export REPO_FINDER_MODEL='openai/gpt-oss-120b'
 
 export GITHUB_TOKEN='...' # optional, but recommended
 ghitty "image generation" \

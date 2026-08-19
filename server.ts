@@ -7,12 +7,38 @@ const port = Number(Bun.env.PORT ?? 3000);
 const MAX_REQUEST_BYTES = 4096;
 const MAX_OUTPUT_BYTES = 5_000_000;
 const MAX_JOBS = 10;
+const DEFAULT_OPENROUTER_MODEL = "openai/gpt-oss-120b";
+const OPENROUTER_MODELS = [
+  {
+    id: DEFAULT_OPENROUTER_MODEL,
+    name: "GPT OSS 120B",
+    inputPerMillion: 0.03,
+    outputPerMillion: 0.17,
+    description: "Recommended lowest-cost model; passed all three live Ghitty planning checks.",
+  },
+  {
+    id: "google/gemini-2.5-flash-lite",
+    name: "Gemini 2.5 Flash Lite",
+    inputPerMillion: 0.1,
+    outputPerMillion: 0.4,
+    description: "Fastest option, but less consistent on niche multilingual expansion.",
+  },
+  {
+    id: "openai/gpt-5-mini",
+    name: "GPT-5 Mini",
+    inputPerMillion: 0.25,
+    outputPerMillion: 2,
+    description: "Higher-quality ranking when latency and cost matter less.",
+  },
+] as const;
+const openRouterModelIds = new Set<string>(OPENROUTER_MODELS.map((model) => model.id));
 
 type JobStatus = "queued" | "running" | "completed" | "failed" | "canceled";
 type JobEvent = { type: string; data: unknown };
 type Job = {
   id: string;
   topic: string;
+  model: string;
   status: JobStatus;
   events: JobEvent[];
   subscribers: Set<ReadableStreamDefaultController<Uint8Array>>;
@@ -86,10 +112,17 @@ async function runSearch(job: Job): Promise<void> {
       "python3",
       join(root, "repo_finder.py"),
       job.topic,
+      "--model",
+      job.model,
       "--grep-evidence",
       join(root, "benchmarks", "grep_evidence.json"),
     ],
-    { cwd: root, env: Bun.env, stdout: "pipe", stderr: "pipe" },
+    {
+      cwd: root,
+      env: { ...Bun.env, REPO_FINDER_PROVIDER: "openrouter" },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
   job.process = process;
   try {
@@ -142,9 +175,13 @@ async function createJob(request: Request): Promise<Response> {
   const topic = typeof rawTopic === "string" ? rawTopic.trim().replace(/\s+/g, " ") : "";
   if (!topic || topic.length > 200)
     return json({ error: "Topic must contain 1-200 characters" }, 400);
+  const rawModel =
+    typeof payload === "object" && payload !== null && "model" in payload ? payload.model : null;
+  const model = typeof rawModel === "string" && rawModel ? rawModel : DEFAULT_OPENROUTER_MODEL;
+  if (!openRouterModelIds.has(model)) return json({ error: "Unsupported model selection" }, 400);
 
   const id = crypto.randomUUID();
-  const job: Job = { id, topic, status: "queued", events: [], subscribers: new Set() };
+  const job: Job = { id, topic, model, status: "queued", events: [], subscribers: new Set() };
   jobs.set(id, job);
   void runSearch(job);
   return json({ id }, 202);
@@ -188,7 +225,9 @@ function cancelJob(job: Job): Response {
 
 const staticFiles = new Map<string, readonly [string, string]>([
   ["/", ["index.html", "text/html; charset=utf-8"]],
+  ["/settings", ["settings.html", "text/html; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
+  ["/settings.js", ["settings.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
 ]);
 
@@ -203,6 +242,9 @@ Bun.serve({
       return new Response(Bun.file(join(publicDir, staticFile[0])), {
         headers: { ...securityHeaders, "Content-Type": staticFile[1] },
       });
+    }
+    if (url.pathname === "/api/models" && request.method === "GET") {
+      return json({ defaultModel: DEFAULT_OPENROUTER_MODEL, models: OPENROUTER_MODELS });
     }
     if (url.pathname === "/api/jobs" && request.method === "POST") return createJob(request);
     const match = url.pathname.match(/^\/api\/jobs\/([0-9a-f-]+)(?:\/events)?$/);

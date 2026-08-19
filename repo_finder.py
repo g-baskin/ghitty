@@ -22,7 +22,7 @@ GITHUB_SEARCH_URL = "https://api.github.com/search/repositories"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENAI_MODEL = "gpt-5.6"
-DEFAULT_OPENROUTER_MODEL = "~openai/gpt-latest"
+DEFAULT_OPENROUTER_MODEL = "openai/gpt-oss-120b"
 MAX_MODEL_OUTPUT_TOKENS = 4096
 MAX_TOPIC_LENGTH = 200
 MAX_QUERY_LENGTH = 256
@@ -193,14 +193,16 @@ def model_json(prompt: str, schema: Mapping[str, Any], model: Optional[str]) -> 
     request: Dict[str, Any] = {
         "model": resolved_model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": MAX_MODEL_OUTPUT_TOKENS,
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "repo_finder", "strict": True, "schema": schema},
         },
     }
     if provider == "openrouter":
+        request["max_tokens"] = MAX_MODEL_OUTPUT_TOKENS
         request["extra_body"] = {"provider": {"require_parameters": True}}
+    else:
+        request["max_completion_tokens"] = MAX_MODEL_OUTPUT_TOKENS
     try:
         completion = client.chat.completions.create(**request)
     except APIStatusError as exc:
@@ -245,7 +247,8 @@ Return 8-12 DISTINCT GitHub repository search queries and 3-10 exact code-search
 GitHub queries must cover every plausible interpretation, English synonyms, technical vocabulary,
 project roles (implementation, SDK, UI, model/data, training/evaluation, infrastructure/integration),
 likely typos/acronym expansions, and 2-3 topic-relevant non-English vocabularies in native script.
-Do not filter by stars, age, archive status, or programming language. Every GitHub query must include
+At least two queries must contain non-Latin native script. Do not filter by stars, age, archive status,
+or programming language. Every GitHub query must include
 fork:false, use no parentheses, and contain at most one OR operator so GitHub accepts it. Code probes
 must be literal source strings likely to prove implementation: imports,
 symbol calls, filenames, environment/config keys, or package identifiers. Avoid generic probes such as

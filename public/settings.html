@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Choose the OpenRouter model Ghitty uses for repository discovery." />
+    <title>Model settings | Ghitty</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/settings.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to settings</a>
+    <header class="site-header">
+      <div class="rail header-inner">
+        <a class="brand" href="/" aria-label="Ghitty home">
+          <span class="brand-mark" aria-hidden="true">GH</span>
+          <span>Ghitty</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Search</a>
+          <a href="/settings" aria-current="page">Settings</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="rail settings-main">
+      <section class="settings-intro" aria-labelledby="page-title">
+        <p class="context">Model settings</p>
+        <h1 id="page-title">Choose how Ghitty thinks.</h1>
+        <p class="lede">
+          The recommended model balances structured-output reliability, speed, and cost. Your choice is stored only in this browser.
+        </p>
+      </section>
+
+      <form id="model-form" class="settings-panel">
+        <div class="field">
+          <label for="model-select">OpenRouter model</label>
+          <select id="model-select" name="model" aria-describedby="model-help model-description" disabled>
+            <option>Loading models...</option>
+          </select>
+          <p id="model-help" class="field-help">
+            Prices are OpenRouter list prices per one million tokens and may change.
+          </p>
+        </div>
+
+        <section
+          id="model-details"
+          class="model-details"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-labelledby="model-details-title"
+        >
+          <h2 id="model-details-title">Model details</h2>
+          <p id="model-description">Loading the available models.</p>
+          <dl>
+            <div>
+              <dt>Input</dt>
+              <dd id="model-input-price">...</dd>
+            </div>
+            <div>
+              <dt>Output</dt>
+              <dd id="model-output-price">...</dd>
+            </div>
+            <div>
+              <dt>Model ID</dt>
+              <dd><code id="model-id">...</code></dd>
+            </div>
+          </dl>
+        </section>
+
+        <div class="settings-actions">
+          <button id="save-model" class="primary-button" type="submit" disabled>Save model</button>
+          <button id="reset-model" class="secondary-button" type="button" disabled>Use recommended</button>
+        </div>
+        <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <footer class="site-footer">
+      <div class="rail footer-inner">
+        <span>Ghitty</span>
+        <span>Local by default. Credentials stay server-side.</span>
+      </div>
+    </footer>
+  </body>
+</html>

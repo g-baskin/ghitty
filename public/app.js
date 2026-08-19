@@ -10,9 +10,28 @@ const resultsSection = document.querySelector("#results-section");
 const results = document.querySelector("#results");
 const resultCount = document.querySelector("#result-count");
 const emptyState = document.querySelector("#empty-state");
+const modelName = document.querySelector("#model-name");
+const MODEL_STORAGE_KEY = "ghitty:openrouter-model";
 
 let activeJobId = null;
 let eventSource = null;
+let selectedModel = null;
+
+async function loadModelSelection() {
+  try {
+    const response = await fetch("/api/models");
+    if (!response.ok) throw new Error("Could not load models");
+    const payload = await response.json();
+    const savedModel = localStorage.getItem(MODEL_STORAGE_KEY);
+    const selected = payload.models.find((model) => model.id === savedModel);
+    const fallback = payload.models.find((model) => model.id === payload.defaultModel);
+    const active = selected ?? fallback;
+    selectedModel = active?.id ?? null;
+    modelName.textContent = active?.name ?? "Server default";
+  } catch {
+    modelName.textContent = "Server default";
+  }
+}
 
 function setBusy(isBusy) {
   submitButton.disabled = isBusy;
@@ -171,7 +190,7 @@ async function startSearch(topic) {
     const response = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify({ topic, model: selectedModel }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "Could not start search");
@@ -206,6 +225,8 @@ cancelButton.addEventListener("click", async () => {
     cancelButton.disabled = false;
   }
 });
+
+void loadModelSelection();
 
 for (const example of document.querySelectorAll("[data-topic]")) {
   example.addEventListener("click", () => {

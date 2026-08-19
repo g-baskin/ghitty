@@ -126,9 +126,23 @@ class RepoFinderTests(unittest.TestCase):
         self.assertEqual(sdk.call_args.kwargs["base_url"], repo_finder.OPENROUTER_BASE_URL)
         request = client.chat.completions.create.call_args.kwargs
         self.assertEqual(request["model"], "test/model")
-        self.assertEqual(request["max_completion_tokens"], repo_finder.MAX_MODEL_OUTPUT_TOKENS)
+        self.assertEqual(request["max_tokens"], repo_finder.MAX_MODEL_OUTPUT_TOKENS)
+        self.assertNotIn("max_completion_tokens", request)
         self.assertTrue(request["response_format"]["json_schema"]["strict"])
         self.assertTrue(request["extra_body"]["provider"]["require_parameters"])
+
+    def test_model_json_uses_openai_output_limit_for_direct_provider(self):
+        completion = Mock()
+        completion.choices = [Mock(message=Mock(content='{"ok": true}'))]
+        client = Mock()
+        client.chat.completions.create.return_value = completion
+        environment = {"REPO_FINDER_PROVIDER": "openai", "OPENAI_API_KEY": "test-key"}
+        with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
+            repo_finder.model_json("prompt", {"type": "object"}, "test/model")
+
+        request = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(request["max_completion_tokens"], repo_finder.MAX_MODEL_OUTPUT_TOKENS)
+        self.assertNotIn("max_tokens", request)
 
     def test_model_json_explains_openrouter_credit_failures(self):
         import httpx

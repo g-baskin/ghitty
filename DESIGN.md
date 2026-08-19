@@ -26,3 +26,9 @@ Use a warm paper canvas, graphite type, cobalt primary action, crisp separators,
 ## Responsive and accessibility contract
 
 One content rail aligns header, form, progress, and results. The two-column work area collapses below 760px; controls remain at least 44px high and results do not require horizontal scrolling. Native form and button semantics lead, keyboard focus uses `:focus-visible`, status changes use a single polite live region, reduced motion disables transitions, and forced-colors receives visible borders. Full WCAG conformance remains unverified pending browser, keyboard, screen-reader, zoom, forced-colors, and automated accessibility checks.
+
+## Model settings
+
+The settings page is a secondary developer-tool surface on the same content rail, not a dashboard. Its single job is choosing the model used by future searches. A native select exposes three curated, server-approved models; the recommended option leads, while price, model ID, and a task-specific tradeoff remain visible before saving.
+
+The choice persists in browser `localStorage` because it is a non-sensitive preference. Loading disables actions, fetch failure gives a retry instruction, selection previews details without saving, Save announces success, and Use recommended clears the override. Search keeps the selected model one link away and falls back to the server default if settings have not loaded. Mobile collapses model facts to one column; native semantics, persistent labels, 44px controls, `:focus-visible`, polite status, reduced motion, forced colors, and long model IDs are covered by the existing component contract.

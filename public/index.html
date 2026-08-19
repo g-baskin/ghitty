@@ -17,7 +17,10 @@
           <span class="brand-mark" aria-hidden="true">GH</span>
           <span>Ghitty</span>
         </a>
-        <p class="header-note">Recall first. Evidence attached.</p>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/" aria-current="page">Search</a>
+          <a href="/settings">Settings</a>
+        </nav>
       </div>
     </header>
 
@@ -51,6 +54,10 @@
             </div>
             <p id="topic-help" class="field-help">
               Searches GitHub metadata and code evidence. Forks are excluded; archived projects stay eligible.
+            </p>
+            <p class="model-choice">
+              Model: <strong id="model-name">Loading selection...</strong>
+              <a href="/settings">Change model</a>
             </p>
             <p id="form-error" class="form-error" role="alert"></p>
           </div>

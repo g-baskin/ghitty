@@ -13,14 +13,14 @@ How model and GitHub providers are selected, authenticated, and inherited by loc
 
 ## Model provider selection
 
-`REPO_FINDER_PROVIDER` accepts `auto`, `openai`, or `openrouter`. In auto mode, the presence of `OPENAI_API_KEY` selects OpenAI; otherwise OpenRouter is selected. Therefore OpenAI wins when both keys are present (`repo_finder.py:170-179`).
+`REPO_FINDER_PROVIDER` accepts `auto`, `openai`, or `openrouter`. In auto mode, the presence of `OPENAI_API_KEY` selects OpenAI; otherwise OpenRouter is selected. Therefore OpenAI wins when both keys are present (`repo_finder.py:171-180`).
 
 | Provider | Credential | Base URL | Default model |
 |---|---|---|---|
 | OpenAI | `OPENAI_API_KEY` | `https://api.openai.com/v1` | `gpt-5.6` |
-| OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` | `~openai/gpt-latest` |
+| OpenRouter | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` | `openai/gpt-oss-120b` |
 
-The defaults and URLs are constants (`repo_finder.py:21-25`). `REPO_FINDER_MODEL` or `--model` overrides the default. Both providers use the pinned OpenAI SDK and strict structured-output schemas; OpenRouter additionally requests providers that support required parameters (`repo_finder.py:180-205`, `pyproject.toml:5-14`).
+The defaults and URLs are constants (`repo_finder.py:21-26`). `REPO_FINDER_MODEL` or `--model` overrides the default. Both providers use the pinned OpenAI SDK and strict structured-output schemas; OpenRouter additionally requests providers that support required parameters (`repo_finder.py:186-205`, `pyproject.toml:5-14`). The web UI exposes a server-approved OpenRouter model list and persists only the selected model ID in browser storage.
 
 ## GitHub authentication
 
@@ -28,7 +28,7 @@ The defaults and URLs are constants (`repo_finder.py:21-25`). `REPO_FINDER_MODEL
 
 ## Process boundary
 
-The CLI reads credentials only from environment variables. The Bun server passes `Bun.env` unchanged to the Python subprocess, so keys available to the server are available to each worker (`repo_finder.py:170-188`, `server.ts:84-93`). Credentials are not sent to the browser by application code; browser requests contain only the topic and job identifier (`public/app.js:161-179`).
+The CLI reads credentials only from environment variables. The Bun server passes its environment to the Python subprocess and forces the web worker to use OpenRouter because the browser selects OpenRouter model IDs (`repo_finder.py:171-188`, `server.ts:112-125`). Credentials are not sent to the browser by application code; browser requests contain the topic, approved model ID, and job identifier.
 
 ## Local handling
 
@@ -38,4 +38,4 @@ The documented preferred local flow loads OpenRouter from macOS Keychain only fo
 
 - Treat subprocess stderr and model/GitHub errors as potentially sensitive operational output; the server forwards stderr lines to connected browsers as progress (`server.ts:95-98`).
 - Model prompts include candidate metadata and imported code snippets, so this data is transmitted to the selected model provider during adaptive search and ranking (`repo_finder.py:329-337`, `repo_finder.py:383-390`).
-- The server binds loopback and supplies a restrictive CSP, but it has no user authentication; do not change the bind address without adding an access-control design (`server.ts:24-29`, `server.ts:195-199`).
+- The server binds loopback and supplies a restrictive CSP, but it has no user authentication; do not change the bind address without adding an access-control design (`server.ts:50-55`, `server.ts:234-238`).
