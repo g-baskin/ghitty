@@ -1,5 +1,7 @@
 {
   "name": "repo-finder-web",
+  "description": "Recall-first GitHub repository discovery with metadata and code evidence",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "scripts": {

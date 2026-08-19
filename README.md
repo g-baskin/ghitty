@@ -1,6 +1,6 @@
-# Repo Finder prototype
+# Repo Finder
 
-Recall-first GitHub repository discovery using OpenAI-compatible structured outputs, adaptive query expansion, GitHub Search, and imported evidence from Ken's Grep MCP.
+Recall-first GitHub repository discovery using OpenAI-compatible structured outputs, adaptive query expansion, GitHub Search, and code evidence from Ken's Grep MCP.
 
 ## Run the local web app
 
@@ -59,3 +59,7 @@ The benchmark compares literal GitHub search with the expanded hybrid pipeline f
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## License
+
+Repo Finder is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). Network deployments of modified versions must offer their corresponding source code to users.
