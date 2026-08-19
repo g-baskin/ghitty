@@ -241,7 +241,11 @@ Bun.serve({
     const staticFile = staticFiles.get(url.pathname);
     if (request.method === "GET" && staticFile) {
       return new Response(Bun.file(join(publicDir, staticFile[0])), {
-        headers: { ...securityHeaders, "Content-Type": staticFile[1] },
+        headers: {
+          ...securityHeaders,
+          "Cache-Control": "no-store",
+          "Content-Type": staticFile[1],
+        },
       });
     }
     if (url.pathname === "/api/models" && request.method === "GET") {
