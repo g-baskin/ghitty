@@ -97,6 +97,18 @@
           </div>
           <button id="cancel-button" class="secondary-button" type="button">Cancel search</button>
         </div>
+        <div
+          id="search-progress"
+          class="live-search-bar"
+          role="progressbar"
+          aria-label="Live Search in progress"
+          hidden
+        >
+          <span class="live-search-label">Live Search</span>
+          <span class="live-search-track" aria-hidden="true">
+            <span class="live-search-indicator"></span>
+          </span>
+        </div>
         <p id="live-status" class="live-status" role="status" aria-live="polite"></p>
         <ol id="progress-list" class="progress-list" aria-label="Search progress"></ol>
       </section>

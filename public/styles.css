@@ -393,8 +393,61 @@ button:disabled {
   line-height: 1.1;
 }
 
+.live-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.live-search-bar[hidden] {
+  display: none;
+}
+
+.live-search-label {
+  flex: 0 0 auto;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.live-search-track {
+  position: relative;
+  height: 8px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.live-search-indicator {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: live-search-progress 1.2s var(--ease) infinite;
+}
+
+@keyframes live-search-progress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(286%);
+  }
+}
+
 .live-status {
-  margin: 24px 0 12px;
+  margin: 16px 0 12px;
   font-weight: 700;
 }
 
@@ -729,6 +782,11 @@ button:disabled {
   .secondary-button {
     transition-duration: 0.01ms;
   }
+
+  .live-search-indicator {
+    width: 100%;
+    animation: none;
+  }
 }
 
 @media (forced-colors: active) {
@@ -736,6 +794,7 @@ button:disabled {
   .badge,
   .primary-button,
   .secondary-button,
+  .live-search-bar,
   input[type="search"],
   select,
   .settings-panel {

@@ -86,6 +86,28 @@ class RepoFinderTests(unittest.TestCase):
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0].evidence_type, "both")
 
+    def test_rank_candidates_requests_fifth_grade_explanations(self):
+        candidate = repo_finder.Candidate(
+            "owner/repo", "https://github.com/owner/repo", "A useful project", "Python", False, "", [], 0
+        )
+        response = {
+            "picks": [
+                {
+                    "full_name": "owner/repo",
+                    "why": "This tool helps people find code. It matches the search topic.",
+                    "role": "tool",
+                    "match": "focused",
+                    "translated_description": None,
+                }
+            ]
+        }
+        with patch("repo_finder.model_json", return_value=response) as model_json:
+            picks = repo_finder.rank_candidates("code search", [candidate], 10, None)
+
+        self.assertEqual(len(picks), 1)
+        self.assertIn("fifth-grade reader", model_json.call_args.args[0])
+        self.assertIn("exactly two short", model_json.call_args.args[0])
+
     def test_load_grep_evidence_rejects_bad_rows_and_bounds_snippets(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "evidence.json"
@@ -130,6 +152,59 @@ class RepoFinderTests(unittest.TestCase):
         self.assertNotIn("max_completion_tokens", request)
         self.assertTrue(request["response_format"]["json_schema"]["strict"])
         self.assertTrue(request["extra_body"]["provider"]["require_parameters"])
+
+    def test_model_json_accepts_json_in_a_markdown_fence(self):
+        client = Mock()
+        client.chat.completions.create.return_value = Mock(
+            choices=[Mock(message=Mock(content='```json\n{"value": "ok"}\n```'))]
+        )
+        schema = {"type": "object", "properties": {"value": {"type": "string"}}}
+        environment = {"REPO_FINDER_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "test-key"}
+
+        with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
+            result = repo_finder.model_json("prompt", schema, "test/model")
+
+        self.assertEqual(result, {"value": "ok"})
+
+    def test_model_json_rejects_prose_around_json(self):
+        client = Mock()
+        client.chat.completions.create.return_value = Mock(
+            choices=[Mock(message=Mock(content='Here is the result: {"value": "ok"}'))]
+        )
+        environment = {"REPO_FINDER_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "test-key"}
+
+        with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
+            with self.assertRaisesRegex(repo_finder.RepoFinderError, "invalid structured content"):
+                repo_finder.model_json("prompt", {"type": "object"}, "test/model")
+
+    def test_model_json_wraps_a_single_array_structured_response(self):
+        client = Mock()
+        client.chat.completions.create.return_value = Mock(
+            choices=[Mock(message=Mock(content='[{"full_name": "owner/repo"}]'))]
+        )
+        schema = {
+            "type": "object",
+            "properties": {"picks": {"type": "array", "items": {"type": "object"}}},
+        }
+        environment = {"REPO_FINDER_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "test-key"}
+
+        with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
+            result = repo_finder.model_json("prompt", schema, "test/model")
+
+        self.assertEqual(result, {"picks": [{"full_name": "owner/repo"}]})
+
+    def test_model_json_rejects_an_array_for_a_multi_property_schema(self):
+        client = Mock()
+        client.chat.completions.create.return_value = Mock(choices=[Mock(message=Mock(content="[]"))])
+        schema = {
+            "type": "object",
+            "properties": {"queries": {"type": "array"}, "reason": {"type": "string"}},
+        }
+        environment = {"REPO_FINDER_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "test-key"}
+
+        with patch.dict(os.environ, environment, clear=True), patch("openai.OpenAI", return_value=client):
+            with self.assertRaisesRegex(repo_finder.RepoFinderError, "non-object"):
+                repo_finder.model_json("prompt", schema, "test/model")
 
     def test_model_json_uses_openai_output_limit_for_direct_provider(self):
         completion = Mock()

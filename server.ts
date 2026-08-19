@@ -4,6 +4,7 @@ const root = import.meta.dir;
 const publicDir = join(root, "public");
 const encoder = new TextEncoder();
 const port = Number(Bun.env.PORT ?? 3000);
+const hostname = Bun.env.HOST ?? "127.0.0.1";
 const MAX_REQUEST_BYTES = 4096;
 const MAX_OUTPUT_BYTES = 5_000_000;
 const MAX_JOBS = 10;
@@ -233,7 +234,7 @@ const staticFiles = new Map<string, readonly [string, string]>([
 ]);
 
 Bun.serve({
-  hostname: "127.0.0.1",
+  hostname,
   idleTimeout: 120,
   port,
   async fetch(request) {

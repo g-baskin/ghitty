@@ -6,6 +6,7 @@ const formError = document.querySelector("#form-error");
 const activity = document.querySelector("#activity");
 const liveStatus = document.querySelector("#live-status");
 const progressList = document.querySelector("#progress-list");
+const searchProgress = document.querySelector("#search-progress");
 const resultsSection = document.querySelector("#results-section");
 const results = document.querySelector("#results");
 const resultCount = document.querySelector("#result-count");
@@ -122,11 +123,15 @@ function renderResults(payload) {
     if (pick.archived) badges.append(badge("archived"));
     if (pick.stale) badges.append(badge("stale"));
 
-    content.append(
-      title,
-      badges,
-      paragraph("result-why", pick.why ?? "No ranking explanation returned."),
+    const explanation = paragraph(
+      "result-why",
+      pick.why ?? "No plain-language explanation was returned.",
     );
+    const explanationLabel = document.createElement("strong");
+    explanationLabel.textContent = "What it does: ";
+    explanation.prepend(explanationLabel);
+
+    content.append(title, badges, explanation);
     if (pick.description) content.append(paragraph("result-description", pick.description));
     if (pick.translated_description && pick.translated_description !== pick.description) {
       const translation = paragraph("translation", pick.translated_description);
@@ -150,6 +155,7 @@ function renderResults(payload) {
 
 function finish(message) {
   setBusy(false);
+  searchProgress.hidden = true;
   liveStatus.textContent = message;
   eventSource?.close();
   eventSource = null;
@@ -184,6 +190,7 @@ async function startSearch(topic) {
   emptyState.hidden = true;
   progressList.replaceChildren();
   setBusy(true);
+  searchProgress.hidden = false;
   liveStatus.textContent = "Starting search";
 
   try {
