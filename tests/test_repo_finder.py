@@ -41,6 +41,22 @@ class RepoFinderTests(unittest.TestCase):
         self.assertIn("everyday request", model_json.call_args.args[0])
         self.assertIs(model_json.call_args.args[1], repo_finder.INTENT_SEARCH_PLAN_SCHEMA)
 
+    def test_create_search_plan_recovers_when_generated_queries_are_empty_after_normalization(self):
+        response = {
+            "interpretations": ["Generate videos locally"],
+            "technical_concepts": ["text to video", "Apple Silicon video generation"],
+            "github_queries": ["fork:false"] * 8,
+            "code_probes": ["DiffusionPipeline(", "model_index.json", "torch.inference_mode("],
+        }
+
+        with patch("repo_finder.model_json", return_value=response):
+            plan = repo_finder.create_search_plan("Create a video generator for my MacBook", None)
+
+        self.assertEqual(
+            plan["github_queries"],
+            ["text to video fork:false", "Apple Silicon video generation fork:false"],
+        )
+
     def test_create_search_plan_rejects_invalid_github_syntax(self):
         response = {
             "interpretations": ["Generate images"],

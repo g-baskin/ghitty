@@ -320,7 +320,9 @@ environment/config keys, or package identifiers; never broad ideas such as 'AI',
         technical_concepts = dedupe(
             validate_plan_term(value, "technical concept") for value in response["technical_concepts"]
         )
-        github_queries = dedupe(validate_github_query(value) for value in response["github_queries"])
+        github_queries = validate_generated_queries(response["github_queries"])
+        if not github_queries:
+            github_queries = validate_generated_queries(technical_concepts)
         code_probes = dedupe(validate_probe(value) for value in response["code_probes"])
     except (KeyError, TypeError) as exc:
         raise RepoFinderError("Model returned an invalid intent/search plan") from exc
@@ -355,6 +357,17 @@ def validate_github_query(query: str) -> str:
     if "(" in query or ")" in query or len(re.findall(r"(?:^|\s)OR(?=\s|$)", query, re.IGNORECASE)) > 1:
         raise RepoFinderError("Generated GitHub query uses unsupported syntax")
     return normalize_query(query)
+
+
+def validate_generated_queries(values: Iterable[str]) -> List[str]:
+    queries: List[str] = []
+    for value in values:
+        try:
+            queries.append(validate_github_query(value))
+        except RepoFinderError as exc:
+            if str(exc) != "Generated query is empty or too long":
+                raise
+    return dedupe(queries)
 
 
 def validate_probe(probe: str) -> str:
@@ -507,7 +520,7 @@ or language. Return an empty list if no genuinely new search path exists."""
     existing_set = {normalize_query(query).casefold() for query in existing}
     result["github_queries"] = [
         query
-        for query in dedupe(validate_github_query(q) for q in result["github_queries"])
+        for query in validate_generated_queries(result["github_queries"])
         if query.casefold() not in existing_set
     ][:5]
     return result
