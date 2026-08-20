@@ -1,129 +1,125 @@
 # Feature: Intent/Search-Plan Refactoring
 
-> Category: Search | Version: 1.0 | Date: August 2026 | Status: Completed
+> Category: Search | Version: 1.1 | Date: August 2026 | Status: Completed
 
-Renames the intent stage from "expand topic" to "create search plan," adds a `technical_concepts` output, tightens
-validation on model-generated queries and probes, and expands the `run()` output contract with
-`original_request`, `search_plan`, and `static_evidence` fields.
+Creates a bounded intent/search plan, executes its literal probes through live KenCode MCP, and ranks only public
+repositories with recognized SPDX licenses.
 
 **Related:**
 - [Search and retrieval pipeline](../../knowledge/private/search/search-retrieval-pipeline.md)
 - [System architecture](../../knowledge/private/architecture/system-architecture.md)
 - [Developer operations and testing](../../knowledge/private/operations/developer-operations-testing.md)
+- [Provider and credential model](../../knowledge/private/security/provider-credential-model.md)
 
 ---
 
 ## Context / Problem
 
-The original `expand_topic()` stage produced interpretations, GitHub queries, and code probes but lacked
-explicit validation on model-generated syntax. Parenthesized or heavily OR'd GitHub queries could slip
-through to the API and fail. There was no structured tracking of whether static code evidence was
-provided or matched. The function name "expand topic" did not describe the stage's actual job: producing
-a concrete, bounded search plan from a freeform request.
+The original `expand_topic()` stage produced interpretations, GitHub queries, and code probes but lacked explicit
+validation on model-generated syntax. Later, the web worker passed `benchmarks/grep_evidence.json` into production,
+which made pre-captured rows look like live code evidence. Candidates could also rank without a recognized license,
+so a public search result was not necessarily safely reusable open source.
 
 ## Decision
 
-Rename the stage to `create_search_plan()`, keeping `expand_topic()` as a backward-compatible alias.
-Add a required `technical_concepts` field to both the schema and the prompt so downstream code has
-a vocabulary list explicitly separated from interpretations. Bound `interpretations` to a maximum of 4.
-Add three boundary validators that reject malformed model output before it reaches the GitHub API or
-is stored in the result. Replace the false "Grep MCP unavailable" message with accurate
-`static_evidence` status reporting.
+1. Keep `create_search_plan()` as the primary intent stage and `expand_topic()` as its compatibility alias.
+2. Validate and bound interpretations, technical concepts, GitHub queries, and literal code probes before I/O.
+3. Execute probes through the project-pinned `@kenkaiiii/kencode-search` stdio server via a small TypeScript MCP client.
+4. Keep `--grep-evidence` only as explicitly file-based compatibility input.
+5. Rank a candidate only when it is not marked private and has a non-empty SPDX identifier other than
+   `NOASSERTION` or `OTHER`.
 
 ## Implementation
 
-**Schema** — `repo_finder.py:31-41`
-`INTENT_SEARCH_PLAN_SCHEMA` (renamed from `EXPANSION_SCHEMA`) requires four arrays:
-`interpretations` (1-4), `technical_concepts` (1-10), `github_queries` (8-12), `code_probes` (3-10).
+### Search plan
 
-**Primary function** — `repo_finder.py:264-295`
-`create_search_plan(request, model)` sends a prompt that:
-- Labels the quoted request as untrusted data (line 266).
-- Asks for interpretations, technical concepts, GitHub queries, and code probes (lines 267-276).
-- Passes the response through each validator and dedupe before returning (lines 278-295).
+`INTENT_SEARCH_PLAN_SCHEMA` requires 1–4 interpretations, 1–10 technical concepts, 8–12 GitHub queries, and 3–10
+code probes (`repo_finder.py:37-46`). `create_search_plan()` builds and validates the plan
+(`repo_finder.py:279-315`); the three boundary validators reject malformed terms, unsupported GitHub syntax, and
+generic/non-literal probes (`repo_finder.py:318-343`).
 
-**Backward alias** — `repo_finder.py:298-300`
-`expand_topic(topic, model)` delegates to `create_search_plan`.
+### MCP boundary
 
-**Boundary validators** — `repo_finder.py:303-328`
-- `validate_plan_term(value, label)` (line 303): rejects non-strings and lengths outside 1–256.
-- `validate_github_query(query)` (line 312): rejects parentheses and >1 `OR` before normalizing.
-- `validate_probe(probe)` (line 320): rejects non-strings, lengths outside 3–256, and generic
-  terms (`ai`, `agent`, `pipeline`).
+`grep_mcp.ts` reads at most 16 KiB of JSON containing 1–10 probes, then revalidates each probe
+(`grep_mcp.ts:9-58`, `grep_mcp.ts:151-161`). It resolves the project-installed server entry point, starts it with an
+executable Node binary through `StdioClientTransport`, calls `searchCode` sequentially with 20-result, context,
+diversity, and 10-second per-call bounds, and closes the client in `finally` (`grep_mcp.ts:126-149`,
+`grep_mcp.ts:163-206`).
 
-**Adaptive query hardening** — `repo_finder.py:409-425`
-`discover_queries()` passes each model-generated adaptive query through `validate_github_query()`
-(line 422) instead of bare `normalize_query()`, catching malformed syntax before the second API call.
+The parser accepts only documented `Repo:`, `File:`, and `Link:` blocks. It bounds files, links, snippets, and rows;
+requires an HTTPS GitHub blob URL matching the repository; and rejects missing, `NOASSERTION`, or `OTHER` licenses
+(`grep_mcp.ts:60-123`).
 
-**`run()` output expansion** — `repo_finder.py:484-533`
-The return dict now includes:
-- `original_request` (line 509)
-- `search_plan` — the full plan dict (line 511)
-- `technical_concepts` (line 513)
-- `static_evidence` with `status` and `candidate_count` (lines 498-505, line 517)
+Python invokes the bridge with an argv array and `shell=False` semantics, a 120-second process timeout, a 2 MB stdout
+cap, and a restricted environment. It validates the JSON again and returns `loaded`, `no-matches`, `partial`,
+`error`, or `disabled` without aborting successful GitHub metadata discovery (`repo_finder.py:544-688`).
 
-Accurate stderr messages replace the false "Grep MCP unavailable" text (lines 499, 502, 505).
+### Open-source gate and ranking
 
-## Verification
+`Candidate` preserves `license` and public/private state in ranking records (`repo_finder.py:90-134`). GitHub rows
+are validated as non-private, canonical GitHub repositories with recognized SPDX identifiers before becoming
+candidates (`repo_finder.py:350-432`). KenCode rows pass the same repository/license rule before merge
+(`repo_finder.py:559-634`). The merged set is filtered again immediately before ranking
+(`repo_finder.py:752-756`).
 
-Four new tests in `tests/test_repo_finder.py`:
-
-| Test | Line | What it proves |
-|------|------|----------------|
-| `test_create_search_plan_preserves_request_and_builds_explicit_intent` | 16 | Round-trips a mocked model response; verifies `original_request` preservation, whitespace trimming, `fork:false` appending, schema usage, and prompt content. |
-| `test_create_search_plan_rejects_invalid_github_syntax` | 44 | A query with `(x OR y) OR z` raises `RepoFinderError("unsupported syntax")` before any API call. |
-| `test_run_rejects_malformed_adaptive_query_before_second_api_call` | 55 | An adaptive query with invalid parentheses fails during `discover_queries()`; `fetch_queries` is called only once (first wave). |
-| `test_run_reports_static_evidence_not_provided` | 75 | When `grep_evidence` is `None`, `run()` returns `static_evidence.status == "not-provided"` and prints an accurate stderr message. |
-
-Run all tests:
-```
-pytest tests/test_repo_finder.py -v
-```
+`run()` reports live evidence separately from file evidence and serializes each pick's `license` and
+`evidence_type` (`repo_finder.py:712-785`). The web worker enables `--live-mcp` and no longer injects the benchmark
+file (`server.ts:108-126`). Result cards expose exact evidence source labels and licenses
+(`public/app.js:73-99`, `public/app.js:128-157`).
 
 ## Output Contract
 
-**Search plan dict** (returned by `create_search_plan`):
 ```json
 {
-  "original_request": "<freeform request string>",
-  "interpretations": ["<1-4 short strings>"],
-  "technical_concepts": ["<1-10 vocabulary terms>"],
-  "github_queries": ["<8-12 queries ending in fork:false>"],
-  "code_probes": ["<3-10 literal source strings>"]
-}
-```
-
-**`run()` result** (new/changed fields):
-```json
-{
-  "original_request": "<topic string>",
-  "topic": "<topic string>",
-  "search_plan": { "<full search plan dict above>" },
-  "technical_concepts": ["<from plan>"],
+  "code_evidence": {
+    "source": "kencode-search",
+    "status": "loaded | no-matches | partial | error | disabled",
+    "probe_count": 3,
+    "candidate_count": 12,
+    "failures": {}
+  },
   "static_evidence": {
+    "source": "file",
     "status": "not-provided | loaded | no-matches",
     "candidate_count": 0
   },
-  "...": "other existing fields unchanged"
+  "picks": [
+    {
+      "url": "https://github.com/owner/repo",
+      "license": "Apache-2.0",
+      "evidence_type": "both | code-match | metadata-match"
+    }
+  ]
 }
 ```
 
-## Consequences
+## Failure Behavior
 
-**Enables:**
-- Downstream consumers can distinguish model vocabulary (`technical_concepts`) from user intent
-  (`interpretations`) without re-parsing the plan.
-- Accurate `static_evidence.status` replaces a misleading availability flag; callers can branch
-  on `not-provided` vs. `loaded` vs. `no-matches`.
-- `original_request` is always preserved in both the plan and the `run()` result, enabling audit
-  trails without reconstructing it from the CLI arguments.
+- Missing Bun/Node, bridge timeout, malformed output, or a global MCP error sets `code_evidence.status` to `error`.
+- A failed subset of probes plus at least one valid match sets `partial`; failures remain keyed by probe.
+- Live evidence failure does not erase licensed GitHub metadata results.
+- Unlicensed or private rows fail closed and never reach model ranking.
+- Static rows without licenses still load for benchmark compatibility but cannot rank unless merged repository
+  evidence establishes a valid license.
 
-**Changed behavior:**
-- Model-generated GitHub queries and adaptive queries with parentheses or >1 `OR` are now rejected
-  with a clear error instead of being sent to the GitHub API and silently failing.
-- Generic code probes (`ai`, `agent`, `pipeline`) are rejected as non-literal.
+## Verification
 
-**Backward compatibility:**
-- `expand_topic()` remains as a one-line alias (line 298-300); existing callers are unaffected.
-- The `run()` return dict is a superset of the previous shape; no existing keys were removed or
-  renamed.
+Parser and boundary tests live in `tests/grep_mcp.test.ts`. Python coverage for public/SPDX filtering, safe subprocess
+arguments/environment, MCP states, malformed rows, merging, and static compatibility lives at
+`tests/test_repo_finder.py:96-318` and `tests/test_repo_finder.py:341-399`.
+
+```bash
+bun run format
+bun run check
+bun test
+python3 -m unittest discover -s tests -v
+printf '{"probes":["useState("]}' | bun run grep_mcp.ts
+git diff --check
+```
+
+## Backward Compatibility
+
+- `expand_topic()` remains an alias for `create_search_plan()`.
+- `--grep-evidence` and `static_evidence` remain available but are explicitly file-based.
+- Existing evidence types remain `metadata-match`, `code-match`, and `both`; `license` and `code_evidence` are
+  additive output fields.

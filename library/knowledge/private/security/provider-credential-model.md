@@ -1,8 +1,8 @@
 # Provider and Credential Model
 
-> Category: Security | Version: 1.0 | Date: August 2026 | Status: Active
+> Category: Security | Version: 1.1 | Date: August 2026 | Status: Active
 
-How model and GitHub providers are selected, authenticated, and inherited by local processes.
+How model, GitHub, and KenCode providers are selected, authenticated, and contained across local processes.
 
 **Related:**
 - [System architecture](../architecture/system-architecture.md)
@@ -24,11 +24,18 @@ The defaults and URLs are constants (`repo_finder.py:21-26`). `REPO_FINDER_MODEL
 
 ## GitHub authentication
 
-`GITHUB_TOKEN` is optional. When present it is sent as a bearer token to GitHub Search. If GitHub returns exactly HTTP 401, the request is retried without the token; other errors follow normal retry/error handling (`repo_finder.py:255-273`, `repo_finder.py:299-304`). Anonymous requests are valid but have lower rate limits.
+`GITHUB_TOKEN` is optional. Python sends it as a bearer token to GitHub Search; an HTTP 401 retries anonymously
+(`repo_finder.py:370-388`). The MCP bridge maps it to `CFM_GITHUB_TOKEN` only when a dedicated value is absent,
+raising KenCode's GitHub metadata/license lookup limits without adding another required credential
+(`grep_mcp.ts:141-149`).
 
-## Process boundary
+## Process boundaries
 
-The CLI reads credentials only from environment variables. The Bun server passes its environment to the Python subprocess and forces the web worker to use OpenRouter because the browser selects OpenRouter model IDs (`repo_finder.py:171-188`, `server.ts:112-125`). Credentials are not sent to the browser by application code; browser requests contain the topic, approved model ID, and job identifier.
+The Bun server inherits local credentials and starts Python with `--live-mcp`; credentials are never sent to the
+browser by application code (`server.ts:108-126`). Python starts the TypeScript bridge with an argv array, no shell,
+a 120-second timeout, a 2 MB stdout cap, and a restricted environment containing only `PATH`, `GITHUB_TOKEN`, and
+documented `CFM_*` settings (`repo_finder.py:544-675`). The bridge resolves the project-installed server entry point
+and starts it with Node over stdio (`grep_mcp.ts:126-149`, `grep_mcp.ts:163-171`).
 
 ## Local handling
 
@@ -36,6 +43,9 @@ The documented preferred local flow loads OpenRouter from macOS Keychain only fo
 
 ## Operational cautions
 
-- Treat subprocess stderr and model/GitHub errors as potentially sensitive operational output; the server forwards stderr lines to connected browsers as progress (`server.ts:95-98`).
-- Model prompts include candidate metadata and imported code snippets, so this data is transmitted to the selected model provider during adaptive search and ranking (`repo_finder.py:329-337`, `repo_finder.py:383-390`).
-- The server binds loopback and supplies a restrictive CSP, but it has no user authentication; do not change the bind address without adding an access-control design (`server.ts:50-55`, `server.ts:234-238`).
+- Treat subprocess stderr and model/GitHub errors as potentially sensitive operational output; the server forwards Python stderr lines to connected browsers as progress (`server.ts:128-145`). KenCode's stderr is captured by Python and is not copied into successful JSON results.
+- MCP output is untrusted. Both bridge and Python validate repository names, canonical HTTPS GitHub blob links, field lengths, result counts, and recognized SPDX identifiers before ranking (`grep_mcp.ts:60-123`, `repo_finder.py:559-634`).
+- Model-provider keys are omitted from the Python-to-bridge environment. Do not broaden `_bridge_environment()` without a concrete KenCode requirement (`repo_finder.py:544-556`).
+- Model prompts include candidate metadata and bounded code snippets, so this data is transmitted to the selected model provider during adaptive search and ranking (`repo_finder.py:476-492`, `repo_finder.py:691-700`).
+- `CFM_DISABLE_LICENSE` may intentionally reduce live matches to zero, but the final Python license gate cannot be disabled (`repo_finder.py:350-367`, `repo_finder.py:752-756`).
+- The server binds loopback and has no user authentication; do not change the bind address without adding access control.

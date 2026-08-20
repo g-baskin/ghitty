@@ -8,5 +8,5 @@
     "strict": true,
     "types": ["bun"]
   },
-  "include": ["server.ts"]
+  "include": ["*.ts", "tests/*.ts"]
 }

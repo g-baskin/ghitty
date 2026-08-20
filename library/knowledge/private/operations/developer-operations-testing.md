@@ -1,8 +1,8 @@
 # Developer Operations and Testing
 
-> Category: Operations | Version: 1.0 | Date: August 2026 | Status: Active
+> Category: Operations | Version: 1.1 | Date: August 2026 | Status: Active
 
-Runtime setup, supported entry points, unit-test boundaries, and benchmark operations.
+Runtime setup, MCP subprocess operations, supported entry points, test boundaries, and benchmarks.
 
 **Related:**
 - [System architecture](../architecture/system-architecture.md)
@@ -14,35 +14,43 @@ Runtime setup, supported entry points, unit-test boundaries, and benchmark opera
 
 ## Runtime setup and entry points
 
-The project combines Python 3.9+ with Bun. Python installs one runtime dependency, `openai==2.48.0`, and exposes the `ghitty` console script (`pyproject.toml:5-17`). Bun serves the local UI with `bun run start`; `bun run dev` watches `server.ts` (`package.json:7-16`). The full installation and credential startup commands are maintained in `README.md:5-45`.
+The project combines Python 3.9+ with Bun and Node.js. Python pins `openai==2.48.0`; Bun pins
+`@kenkaiiii/kencode-search@0.1.18` and `@modelcontextprotocol/sdk@1.30.0` (`pyproject.toml:5-17`,
+`package.json:14-22`). `bun run start` serves the local UI, and `bun run dev` watches `server.ts`.
 
-The CLI accepts a topic plus `--results-per-query` (1–100, default 25), `--top` (1–50, default 10), optional `--model`, and optional `--grep-evidence` (`repo_finder.py:444-451`). Progress is written to stderr and the final document to stdout (`repo_finder.py:402-440`, `repo_finder.py:454-466`).
+The CLI accepts a topic, `--results-per-query`, `--top`, optional `--model`, opt-in `--live-mcp`, and optional
+file-based `--grep-evidence` (`repo_finder.py:788-796`). The web worker always supplies `--live-mcp`
+(`server.ts:108-126`). Progress is written to stderr and the final JSON document to stdout.
 
 ## Unit tests
 
-The Python suite uses `unittest`, although the repository-level test command is `python3 -m unittest discover -s tests -v` (`tests/test_repo_finder.py:1-8`, `README.md:57-61`). Tests cover:
+The deterministic suites are `bun test` and `python3 -m unittest discover -s tests -v`. Coverage includes:
 
-- query normalization and fork exclusion;
-- intent/search-plan creation preserving the original request and technical concepts, and rejecting invalid GitHub query syntax (`validate_github_query`);
-- archived-result preservation and provenance merging;
-- GitHub rate-limit waiting and invalid-token fallback;
-- Grep row validation and snippet bounds;
-- static evidence reporting and adaptive query validation;
-- provider credential requirements and OpenRouter SDK configuration;
-- oversized-topic rejection before network access (`tests/test_repo_finder.py:11-316`).
+- KenCode labeled-output parsing, no-results handling, malformed/unlicensed blocks, and input/result/snippet bounds (`tests/grep_mcp.test.ts`);
+- query normalization, intent/search-plan validation, and malformed adaptive-query rejection;
+- public GitHub and SPDX filtering, archive preservation, provenance/license merging, rate limits, and invalid-token fallback;
+- argv-only bridge invocation, restricted environment forwarding, loaded/no-match/partial/error states, and malformed bridge rows (`tests/test_repo_finder.py:96-318`);
+- file-evidence compatibility and exclusion of unlicensed file-only rows from production ranking (`tests/test_repo_finder.py:341-399`);
+- provider credential requirements, OpenRouter SDK configuration, and oversized-topic rejection.
 
-The tests mock external requests and SDK calls. They do not exercise the Bun API, SSE replay/cancellation, browser rendering, live GitHub/model integrations, or accessibility behavior. `DESIGN.md:26-28` also records browser and accessibility checks as unverified.
+The tests mock external requests, SDK calls, and the Python-to-Bun subprocess. The explicit live smoke test below
+exercises the real stdio server and public index. Browser rendering, SSE replay/cancellation, and accessibility still
+require integration or browser checks; `DESIGN.md:26-28` records the accessibility gap.
 
 ## Benchmark
 
-`python3 benchmarks/run_benchmark.py` runs three fixed topics: image generation, LLM agent orchestration, and Splunk/Cribl pipeline tooling. For each, it compares a literal GitHub search with `repo_finder.run`, records expanded candidate counts and top picks absent from the literal top 25, and writes timestamped JSON under ignored `benchmark-results/` (`benchmarks/run_benchmark.py:14-44`). A model-provider key is required; `GITHUB_TOKEN` remains optional (`benchmarks/run_benchmark.py:19-28`).
-
-`benchmarks/grep_evidence.json` is imported evidence captured outside this process. Keep its row shape compatible with `load_grep_evidence`: topic key to rows containing `full_name`, matching GitHub blob `url`, `probe`, and `snippet` (`repo_finder.py:348-380`).
+`python3 benchmarks/run_benchmark.py` runs three fixed topics and writes timestamped JSON under ignored
+`benchmark-results/`. `benchmarks/grep_evidence.json` remains an optional file-based fixture. Its rows may include
+`license`; rows without a recognized SPDX identifier still load for compatibility but cannot enter production
+ranking unless merged evidence establishes a valid repository license (`repo_finder.py:495-541`,
+`repo_finder.py:742-756`).
 
 ## Change checklist
 
-1. Keep Python behavior and CLI output backward-compatible with the web worker's single-JSON stdout assumption (`server.ts:95-106`).
-2. Add or update mocked Python unit tests for discovery behavior (`tests/test_repo_finder.py`).
-3. When changing web jobs, validate create, replay, completion, failure, reconnect, and cancellation paths documented in [Local web and SSE jobs](../web/local-web-sse-jobs.md).
-4. Use the package's `check` script for TypeScript/Biome changes and the unittest command for Python changes (`package.json:7-11`, `README.md:57-61`).
-5. Run the benchmark only when credentials and live-service variability are acceptable; its output is not a deterministic unit test (`benchmarks/run_benchmark.py:19-44`).
+1. Keep stdout as one JSON document; MCP/server logs belong on stderr.
+2. Add deterministic TypeScript parser tests and mocked Python boundary tests for bridge changes.
+3. Run `bun run format`, then re-read formatter-mutated files.
+4. Run `bun run check`, `bun test`, and `python3 -m unittest discover -s tests -v`.
+5. Run `printf '{"probes":["useState("]}' | bun run grep_mcp.ts` when network access is acceptable; verify every returned row has repository, file, link, snippet, and license.
+6. Run `git diff --check` and inspect the complete diff before commit.
+7. Run the benchmark only when model credentials and live-service variability are acceptable.

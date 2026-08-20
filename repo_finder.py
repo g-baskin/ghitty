@@ -7,13 +7,16 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -27,7 +30,10 @@ MAX_MODEL_OUTPUT_TOKENS = 4096
 MAX_TOPIC_LENGTH = 200
 MAX_QUERY_LENGTH = 256
 MAX_RANKING_CANDIDATES = 100
+MCP_BRIDGE_TIMEOUT_SECONDS = 120
+MCP_BRIDGE_PATH = Path(__file__).with_name("grep_mcp.ts")
 REPOSITORY_NAME_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+SPDX_LICENSE_MODULES = ("index.json", "deprecated.json")
 
 INTENT_SEARCH_PLAN_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -82,6 +88,20 @@ class RepoFinderError(RuntimeError):
     """Expected external-service or response error."""
 
 
+@lru_cache(maxsize=1)
+def _spdx_license_ids() -> frozenset[str]:
+    root = Path(__file__).with_name("node_modules") / "spdx-license-ids"
+    identifiers: set[str] = set()
+    try:
+        for filename in SPDX_LICENSE_MODULES:
+            values = json.loads((root / filename).read_text(encoding="utf-8"))
+            if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+                raise ValueError(f"invalid SPDX data in {filename}")
+            identifiers.update(values)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise RepoFinderError("SPDX license data is unavailable; run bun install") from exc
+    return frozenset(identifiers)
+
 @dataclass
 class Candidate:
     full_name: str
@@ -92,6 +112,8 @@ class Candidate:
     updated_at: str
     topics: List[str]
     stars: int
+    license: Optional[str] = None
+    public: Optional[bool] = None
     github_queries: List[str] = field(default_factory=list)
     grep_evidence: List[Dict[str, str]] = field(default_factory=list)
 
@@ -120,6 +142,7 @@ class Candidate:
             "stale": self.stale,
             "updated_at": self.updated_at,
             "topics": self.topics,
+            "license": self.license,
             "github_queries": self.github_queries,
             "grep_evidence": self.grep_evidence[:3],
             "evidence_type": self.evidence_type,
@@ -339,6 +362,22 @@ def dedupe(values: Iterable[str]) -> List[str]:
     return list(dict.fromkeys(values))
 
 
+def is_valid_repository_name(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and REPOSITORY_NAME_RE.fullmatch(value) is not None
+        and all(part not in {".", ".."} for part in value.split("/"))
+    )
+
+
+def is_recognized_spdx(value: Any) -> bool:
+    return isinstance(value, str) and value in _spdx_license_ids()
+
+
+def is_open_source(candidate: Candidate) -> bool:
+    return candidate.public is not False and is_recognized_spdx(candidate.license)
+
+
 def github_search(query: str, per_query: int, token: Optional[str]) -> List[Candidate]:
     normalized_query = normalize_query(query)
     params = urlencode({"q": normalized_query, "per_page": per_query})
@@ -364,8 +403,29 @@ def github_search(query: str, per_query: int, token: Optional[str]) -> List[Cand
     for item in items:
         if not isinstance(item, dict) or item.get("fork") is True:
             continue
+        private = item.get("private")
+        if private is True or (private is not None and not isinstance(private, bool)):
+            continue
+        license_data = item.get("license")
+        license_id = license_data.get("spdx_id") if isinstance(license_data, dict) else None
         full_name, html_url = item.get("full_name"), item.get("html_url")
-        if not isinstance(full_name, str) or not isinstance(html_url, str):
+        topics = item.get("topics", [])
+        stars = item.get("stargazers_count", 0)
+        archived = item.get("archived")
+        updated_at = item.get("updated_at", "")
+        if (
+            not isinstance(full_name, str)
+            or not is_valid_repository_name(full_name)
+            or not isinstance(html_url, str)
+            or html_url != f"https://github.com/{full_name}"
+            or not is_recognized_spdx(license_id)
+            or not isinstance(topics, list)
+            or not isinstance(stars, int)
+            or isinstance(stars, bool)
+            or stars < 0
+            or not isinstance(archived, bool)
+            or not isinstance(updated_at, str)
+        ):
             continue
         candidates.append(
             Candidate(
@@ -373,10 +433,12 @@ def github_search(query: str, per_query: int, token: Optional[str]) -> List[Cand
                 html_url=html_url,
                 description=item.get("description") if isinstance(item.get("description"), str) else None,
                 language=item.get("language") if isinstance(item.get("language"), str) else None,
-                archived=bool(item.get("archived")),
-                updated_at=str(item.get("updated_at", "")),
-                topics=[topic for topic in item.get("topics", []) if isinstance(topic, str)],
-                stars=int(item.get("stargazers_count", 0)),
+                archived=archived,
+                updated_at=updated_at,
+                topics=[topic for topic in topics if isinstance(topic, str)],
+                stars=stars,
+                license=license_id,
+                public=not private if isinstance(private, bool) else None,
                 github_queries=[normalized_query],
             )
         )
@@ -410,6 +472,15 @@ def merge_candidates(candidates: Iterable[Candidate]) -> Dict[str, Candidate]:
             continue
         existing.github_queries = dedupe(existing.github_queries + candidate.github_queries)
         existing.grep_evidence.extend(candidate.grep_evidence)
+        if not is_recognized_spdx(existing.license) and is_recognized_spdx(candidate.license):
+            existing.license = candidate.license
+        if candidate.public is False:
+            existing.public = False
+        elif existing.public is None:
+            existing.public = candidate.public
+        existing.stars = max(existing.stars, candidate.stars)
+        if not existing.updated_at and candidate.updated_at:
+            existing.updated_at = candidate.updated_at
     return merged
 
 
@@ -447,10 +518,22 @@ def load_grep_evidence(path: Optional[Path], topic: str) -> List[Candidate]:
         if not isinstance(row, dict):
             continue
         full_name, url, probe, snippet = (row.get(k) for k in ("full_name", "url", "probe", "snippet"))
-        if not all(isinstance(value, str) and value for value in (full_name, url, probe, snippet)):
+        if (
+            not isinstance(full_name, str)
+            or not full_name
+            or not isinstance(url, str)
+            or not url
+            or not isinstance(probe, str)
+            or not probe
+            or not isinstance(snippet, str)
+            or not snippet
+        ):
             continue
-        if not REPOSITORY_NAME_RE.fullmatch(full_name) or not url.startswith(f"https://github.com/{full_name}/"):
+        if not is_valid_repository_name(full_name) or not url.startswith(
+            f"https://github.com/{full_name}/blob/"
+        ):
             continue
+        license_id = row.get("license")
         candidates.append(
             Candidate(
                 full_name=full_name,
@@ -461,10 +544,159 @@ def load_grep_evidence(path: Optional[Path], topic: str) -> List[Candidate]:
                 updated_at="",
                 topics=[],
                 stars=0,
-                grep_evidence=[{"probe": probe, "snippet": snippet[:500], "url": url}],
+                license=license_id if is_recognized_spdx(license_id) else None,
+                public=None,
+                grep_evidence=[{"probe": probe, "snippet": snippet[:500], "url": url, "source": "file"}],
             )
         )
     return candidates
+
+
+def _bridge_environment() -> Dict[str, str]:
+    allowed = {
+        "CFM_BACKEND",
+        "CFM_REPOS_DIR",
+        "CFM_SOURCEGRAPH_URL",
+        "CFM_SOURCEGRAPH_TOKEN",
+        "CFM_GITHUB_TOKEN",
+        "CFM_DISABLE_LICENSE",
+        "CFM_SKIP_NETWORK",
+        "GITHUB_TOKEN",
+        "PATH",
+    }
+    return {key: value for key, value in os.environ.items() if key in allowed}
+
+
+def _parse_bridge_response(payload: Any, probes: Sequence[str]) -> Tuple[List[Candidate], Dict[str, str]]:
+    if not isinstance(payload, dict):
+        raise RepoFinderError("MCP bridge returned a non-object response")
+    results, failures = payload.get("results"), payload.get("failures")
+    if not isinstance(results, dict) or not isinstance(failures, dict):
+        raise RepoFinderError("MCP bridge response is missing results or failures")
+    known_probes = set(probes)
+    if (set(results) | set(failures)) - known_probes:
+        raise RepoFinderError("MCP bridge returned an unknown probe")
+
+    clean_failures: Dict[str, str] = {}
+    candidates: List[Candidate] = []
+    for probe in probes:
+        failure = failures.get(probe)
+        if failure is not None:
+            if not isinstance(failure, str):
+                raise RepoFinderError("MCP bridge returned a malformed failure")
+            clean_failures[probe] = failure[:300]
+        rows = results.get(probe)
+        if rows is None:
+            if failure is None:
+                raise RepoFinderError("MCP bridge omitted a probe result")
+            continue
+        if not isinstance(rows, list) or len(rows) > 20:
+            raise RepoFinderError("MCP bridge returned malformed or excessive matches")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise RepoFinderError("MCP bridge returned a malformed match")
+            full_name = row.get("repo")
+            file_path = row.get("file")
+            link = row.get("link")
+            snippet = row.get("snippet")
+            license_id = row.get("license")
+            updated_at = row.get("updated_at", "")
+            stars = row.get("stars", 0)
+            if (
+                not isinstance(full_name, str)
+                or not is_valid_repository_name(full_name)
+                or not isinstance(file_path, str)
+                or not 0 < len(file_path) <= 500
+                or not isinstance(link, str)
+                or not link.startswith(f"https://github.com/{full_name}/blob/")
+                or len(link) > 2_048
+                or not isinstance(snippet, str)
+                or not 0 < len(snippet) <= 4_000
+                or not is_recognized_spdx(license_id)
+                or not isinstance(updated_at, str)
+                or not isinstance(stars, int)
+                or isinstance(stars, bool)
+                or stars < 0
+            ):
+                raise RepoFinderError("MCP bridge returned a malformed or unlicensed match")
+            candidates.append(
+                Candidate(
+                    full_name=full_name,
+                    html_url=f"https://github.com/{full_name}",
+                    description=None,
+                    language=None,
+                    archived=None,
+                    updated_at=updated_at,
+                    topics=[],
+                    stars=stars,
+                    license=license_id,
+                    public=True,
+                    grep_evidence=[
+                        {
+                            "probe": probe,
+                            "file": file_path,
+                            "snippet": snippet[:500],
+                            "url": link,
+                            "source": "kencode-search",
+                        }
+                    ],
+                )
+            )
+    return list(merge_candidates(candidates).values()), clean_failures
+
+
+def load_live_code_evidence(probes: Sequence[str], enabled: bool) -> Tuple[List[Candidate], Dict[str, Any]]:
+    summary: Dict[str, Any] = {
+        "source": "kencode-search",
+        "status": "disabled" if not enabled else "error",
+        "probe_count": len(probes),
+        "candidate_count": 0,
+        "failures": {},
+    }
+    if not enabled:
+        return [], summary
+    bun = shutil.which("bun")
+    node = shutil.which("node")
+    if not bun or not node:
+        summary["failures"] = {"bridge": "Bun and Node.js are required for live code evidence"}
+        return [], summary
+    if not MCP_BRIDGE_PATH.is_file():
+        summary["failures"] = {"bridge": "grep_mcp.ts is missing"}
+        return [], summary
+    try:
+        completed = subprocess.run(
+            [bun, "run", str(MCP_BRIDGE_PATH)],
+            input=json.dumps({"probes": [validate_probe(probe) for probe in probes]}),
+            text=True,
+            capture_output=True,
+            timeout=MCP_BRIDGE_TIMEOUT_SECONDS,
+            cwd=MCP_BRIDGE_PATH.parent,
+            env=_bridge_environment(),
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise RepoFinderError(f"MCP bridge exited with status {completed.returncode}")
+        if len(completed.stdout) > 2_000_000:
+            raise RepoFinderError("MCP bridge response exceeded 2 MB")
+        candidates, failures = _parse_bridge_response(json.loads(completed.stdout), probes)
+    except subprocess.TimeoutExpired:
+        summary["failures"] = {"bridge": "MCP bridge timed out"}
+        return [], summary
+    except (OSError, json.JSONDecodeError, RepoFinderError) as exc:
+        summary["failures"] = {"bridge": str(exc)[:300]}
+        return [], summary
+
+    summary["candidate_count"] = len(candidates)
+    summary["failures"] = failures
+    if candidates and failures:
+        summary["status"] = "partial"
+    elif candidates:
+        summary["status"] = "loaded"
+    elif failures:
+        summary["status"] = "error"
+    else:
+        summary["status"] = "no-matches"
+    return candidates, summary
 
 
 def rank_candidates(topic: str, candidates: Sequence[Candidate], top: int, model: Optional[str]) -> List[Dict[str, Any]]:
@@ -488,29 +720,48 @@ match is evidence, not an automatic relevance boost. Candidates: {json.dumps([c.
     return picks[:top]
 
 
-def run(topic: str, per_query: int, top: int, model: Optional[str], grep_evidence: Optional[Path]) -> Dict[str, Any]:
+def run(
+    topic: str,
+    per_query: int,
+    top: int,
+    model: Optional[str],
+    grep_evidence: Optional[Path],
+    live_mcp: bool = False,
+) -> Dict[str, Any]:
     started = time.monotonic()
     plan = create_search_plan(topic, model)
     print("First-wave GitHub queries:", file=sys.stderr)
     first, failures = fetch_queries(plan["github_queries"], per_query)
     merged_first = list(merge_candidates(first).values())
-    adaptive = discover_queries(topic, merged_first, plan["github_queries"], model) if merged_first else {"github_queries": [], "reason": "No first-wave candidates"}
+    adaptive = (
+        discover_queries(topic, merged_first, plan["github_queries"], model)
+        if merged_first
+        else {"github_queries": [], "reason": "No first-wave candidates"}
+    )
     second: List[Candidate] = []
     if adaptive["github_queries"]:
         print("Adaptive GitHub queries:", file=sys.stderr)
         second, second_failures = fetch_queries(adaptive["github_queries"], per_query)
         failures.update(second_failures)
+
+    code_candidates, code_evidence = load_live_code_evidence(plan["code_probes"], live_mcp)
+    if code_evidence["status"] in {"loaded", "partial"}:
+        print(f"Live code evidence loaded for {len(code_candidates)} candidate(s)", file=sys.stderr)
+    elif code_evidence["status"] == "error":
+        print("Live code evidence failed; continuing with licensed GitHub metadata", file=sys.stderr)
+
     grep_candidates = load_grep_evidence(grep_evidence, topic)
     if grep_evidence is None:
-        static_evidence = {"status": "not-provided", "candidate_count": 0}
-        print("Static code evidence not provided; continuing with GitHub metadata evidence", file=sys.stderr)
+        static_evidence = {"source": "file", "status": "not-provided", "candidate_count": 0}
     elif grep_candidates:
-        static_evidence = {"status": "loaded", "candidate_count": len(grep_candidates)}
-        print(f"Static code evidence loaded for {len(grep_candidates)} candidate(s)", file=sys.stderr)
+        static_evidence = {"source": "file", "status": "loaded", "candidate_count": len(grep_candidates)}
+        print(f"File-based code evidence loaded for {len(grep_candidates)} candidate(s)", file=sys.stderr)
     else:
-        static_evidence = {"status": "no-matches", "candidate_count": 0}
-        print("Static code evidence file contained no matches for this request", file=sys.stderr)
-    merged = list(merge_candidates([*first, *second, *grep_candidates]).values())
+        static_evidence = {"source": "file", "status": "no-matches", "candidate_count": 0}
+        print("File-based code evidence contained no matches for this request", file=sys.stderr)
+
+    all_candidates = merge_candidates([*first, *second, *code_candidates, *grep_candidates]).values()
+    merged = [candidate for candidate in all_candidates if is_open_source(candidate)]
     if len(merged) > MAX_RANKING_CANDIDATES:
         print(f"Capping {len(merged)} candidates to {MAX_RANKING_CANDIDATES} for ranking", file=sys.stderr)
     picks = rank_candidates(topic, merged[:MAX_RANKING_CANDIDATES], top, model)
@@ -523,6 +774,7 @@ def run(topic: str, per_query: int, top: int, model: Optional[str], grep_evidenc
         "github_queries": plan["github_queries"],
         "adaptive_queries": adaptive["github_queries"],
         "code_probes": plan["code_probes"],
+        "code_evidence": code_evidence,
         "static_evidence": static_evidence,
         "candidate_count": len(merged),
         "query_failures": failures,
@@ -532,6 +784,7 @@ def run(topic: str, per_query: int, top: int, model: Optional[str], grep_evidenc
                 **{key: value for key, value in pick.items() if key != "repository"},
                 "url": pick["repository"].html_url,
                 "description": pick["repository"].description,
+                "license": pick["repository"].license,
                 "archived": pick["repository"].archived,
                 "stale": pick["repository"].stale,
                 "evidence_type": pick["repository"].evidence_type,
@@ -549,7 +802,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--results-per-query", type=int, default=25, choices=range(1, 101), metavar="1-100")
     parser.add_argument("--top", type=int, default=10, choices=range(1, 51), metavar="1-50")
     parser.add_argument("--model", default=os.environ.get("REPO_FINDER_MODEL"))
-    parser.add_argument("--grep-evidence", type=Path, help="JSON exported from Ken's Grep MCP")
+    parser.add_argument("--live-mcp", action="store_true", help="Use live KenCode MCP evidence")
+    parser.add_argument("--grep-evidence", type=Path, help="JSON file with pre-captured code evidence")
     return parser.parse_args(argv)
 
 
@@ -560,7 +814,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"error: topic must contain 1-{MAX_TOPIC_LENGTH} characters", file=sys.stderr)
         return 2
     try:
-        result = run(topic, args.results_per_query, args.top, args.model, args.grep_evidence)
+        result = run(
+            topic,
+            args.results_per_query,
+            args.top,
+            args.model,
+            args.grep_evidence,
+            live_mcp=args.live_mcp,
+        )
     except RepoFinderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

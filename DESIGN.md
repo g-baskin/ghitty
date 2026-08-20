@@ -19,9 +19,9 @@ Use a warm paper canvas, graphite type, cobalt primary action, crisp separators,
 
 - Search form: persistent label, example topics, pending state, duplicate-submit prevention.
 - Progress: concise live status plus a visible event list that is not repeatedly announced.
-- Results: repository link, role, focused/partial match, evidence source, archive/stale state, original and translated descriptions, and linked code snippets.
-- Recovery: validation error, provider/configuration error, retry through preserved input, and cancel for active work.
-- Empty state: explains GitHub metadata plus Grep evidence without invented results.
+- Results: repository link, role, focused/partial match, recognized SPDX license, exact evidence source, archive/stale state, original and translated descriptions, and linked code snippets.
+- Recovery: validation error, provider/configuration error, retry through preserved input, and cancel for active work. Live MCP `error` or `partial` states do not masquerade as complete code coverage; licensed GitHub metadata may still render.
+- Empty state: explains licensed GitHub metadata plus live KenCode evidence without invented results.
 
 ## Responsive and accessibility contract
 

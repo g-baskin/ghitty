@@ -109,15 +109,7 @@ async function runSearch(job: Job): Promise<void> {
   job.status = "running";
   emit(job, "status", { state: "running", message: "Expanding the search topic" });
   const process = Bun.spawn(
-    [
-      "python3",
-      join(root, "repo_finder.py"),
-      job.topic,
-      "--model",
-      job.model,
-      "--grep-evidence",
-      join(root, "benchmarks", "grep_evidence.json"),
-    ],
+    ["python3", join(root, "repo_finder.py"), job.topic, "--model", job.model, "--live-mcp"],
     {
       cwd: root,
       env: { ...Bun.env, REPO_FINDER_PROVIDER: "openrouter" },

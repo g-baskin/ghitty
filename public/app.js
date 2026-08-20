@@ -75,17 +75,27 @@ function renderEvidence(container, evidence) {
     const block = document.createElement("div");
     block.className = "evidence-block";
     const heading = document.createElement("h4");
-    heading.textContent = `Code evidence: ${item.probe}`;
+    const source = item.source === "kencode-search" ? "Live KenCode match" : "File-based evidence";
+    heading.textContent = `${source}: ${item.probe}`;
     const snippet = document.createElement("pre");
     snippet.textContent = item.snippet;
     const link = document.createElement("a");
     link.href = item.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = "Open source match";
+    link.textContent = "View matched file";
     block.append(heading, snippet, link);
     container.append(block);
   }
+}
+
+function evidenceLabel(pick) {
+  const sources = new Set((pick.grep_evidence ?? []).map((item) => item.source));
+  if (pick.evidence_type === "both" && sources.has("kencode-search")) return "metadata + live code";
+  if (pick.evidence_type === "both") return "metadata + file code";
+  if (sources.has("kencode-search")) return "live code match";
+  if (sources.has("file")) return "file code match";
+  return "GitHub metadata";
 }
 
 function renderResults(payload) {
@@ -118,10 +128,11 @@ function renderResults(payload) {
     const badges = document.createElement("div");
     badges.className = "badges";
     badges.append(
-      badge(pick.evidence_type ?? "metadata-match", pick.evidence_type === "both"),
+      badge(evidenceLabel(pick), pick.evidence_type === "both"),
       badge(pick.role ?? "repository"),
       badge(pick.match ?? "focused"),
     );
+    if (pick.license) badges.append(badge(`${pick.license} license`, true));
     if (pick.archived) badges.append(badge("archived"));
     if (pick.stale) badges.append(badge("stale"));
 

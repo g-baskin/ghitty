@@ -1,6 +1,6 @@
 # Local Web and SSE Jobs
 
-> Category: Web | Version: 1.0 | Date: August 2026 | Status: Active
+> Category: Web | Version: 1.1 | Date: August 2026 | Status: Active
 
 The in-memory job protocol joining the browser, Bun server, and Python search subprocess.
 
@@ -20,7 +20,7 @@ sequenceDiagram
     participant Py as repo_finder.py
     UI->>Bun: POST /api/jobs {topic, model}
     Bun-->>UI: 202 {id}
-    Bun->>Py: spawn python3 ... --model ... --grep-evidence ...
+    Bun->>Py: spawn python3 ... --model ... --live-mcp
     UI->>Bun: GET /api/jobs/{id}/events
     Py-->>Bun: stderr progress lines
     Bun-->>UI: SSE progress
@@ -31,7 +31,7 @@ sequenceDiagram
 
 `POST /api/jobs` requires JSON, normalizes whitespace, enforces a 1–200 character topic and 4 KB body, validates the model against the server allowlist, and returns a UUID with status 202. It rejects new work when ten jobs are currently running. The queued state is brief because `runSearch` starts immediately and sets the job to running.
 
-The worker command invokes `python3 repo_finder.py <topic> --model <approved-id> --grep-evidence benchmarks/grep_evidence.json`, forces the subprocess provider to OpenRouter, and uses the repository root as its working directory. stderr non-empty lines become `progress` events; stdout is collected and parsed as one JSON result.
+The worker command invokes `python3 repo_finder.py <topic> --model <approved-id> --live-mcp`, forces the subprocess provider to OpenRouter, and uses the repository root as its working directory (`server.ts:108-126`). It does not inject benchmark evidence. stderr non-empty lines become `progress` events; stdout is collected and parsed as one JSON result.
 
 ## SSE behavior
 

@@ -29,30 +29,36 @@ OPENROUTER_API_KEY="$(security find-generic-password -a "$USER" -s repo-finder-o
   PORT=3001 bun run start
 ```
 
-Open <http://localhost:3001>. Choose a model at <http://localhost:3001/settings>; the non-sensitive preference stays in browser storage. For a simpler setup, copy `.env.example` to `.env` and add the key there; `.env` is gitignored but remains plaintext.
+`GITHUB_TOKEN` raises GitHub metadata and KenCode license-lookup limits. The MCP bridge maps it to
+`CFM_GITHUB_TOKEN` unless that dedicated variable is already set; model-provider keys are not forwarded to KenCode.
+
+Open <http://localhost:3001>. Every web search enables live KenCode MCP evidence. Choose a model at
+<http://localhost:3001/settings>; the non-sensitive preference stays in browser storage. For a simpler setup, copy
+`.env.example` to `.env` and add the key there; `.env` is gitignored but remains plaintext.
 
 Ghitty defaults to `openai/gpt-oss-120b`, the cheapest model that passed all three live strict-JSON planning checks. OpenRouter listed it at $0.03/M input tokens and $0.17/M output tokens on 2026-08-18. The settings page also offers faster `google/gemini-2.5-flash-lite` and higher-quality `openai/gpt-5-mini`; verify current prices before production use.
 
 ## Run one CLI search
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install .
-
-# Direct OpenAI
-export OPENAI_API_KEY='...'
-
-# Or OpenRouter through the same OpenAI SDK
-# export OPENROUTER_API_KEY='...'
-# export REPO_FINDER_PROVIDER='openrouter'
-# export REPO_FINDER_MODEL='openai/gpt-oss-120b'
-
-export GITHUB_TOKEN='...' # optional, but recommended
-ghitty "image generation" \
-  --grep-evidence benchmarks/grep_evidence.json
+ghitty "image generation" --live-mcp
 ```
 
-Keys are read only from environment variables. `REPO_FINDER_PROVIDER` accepts `openai` or `openrouter`; automatic selection prefers OpenAI when both keys exist. Output is JSON; query progress and skipped requests go to stderr.
+Keys are read only from environment variables. `REPO_FINDER_PROVIDER` accepts `openai` or `openrouter`; automatic selection prefers OpenAI when both keys exist. Output is JSON; query progress and skipped requests go to stderr. Omit `--live-mcp` only for an intentional metadata-only run.
+
+## Evidence and open-source gate
+
+`create_search_plan()` emits 3–10 validated literal probes. Python sends one bounded JSON request to
+`grep_mcp.ts`; the bridge starts the project-pinned `@kenkaiiii/kencode-search` stdio server through the pinned MCP
+SDK, calls `searchCode` sequentially, and returns bounded labeled matches. A timeout, missing Bun/Node, malformed
+response, or tool error is reported in `code_evidence`; licensed GitHub metadata can still rank.
+
+A repository reaches ranking only when it is not marked private and has a non-empty SPDX identifier other than
+`NOASSERTION` or `OTHER`. Picks expose `license` plus `evidence_type`; the UI distinguishes GitHub metadata, live
+KenCode matches, and deliberately supplied file evidence.
+
+`--grep-evidence benchmarks/grep_evidence.json` remains available for benchmark fixtures. Unlicensed file-only rows
+load for backward compatibility but cannot enter production ranking.
 
 ## Run the benchmark
 
@@ -62,12 +68,15 @@ python3 benchmarks/run_benchmark.py
 
 The benchmark compares literal GitHub search with the expanded hybrid pipeline for `image generation`, `llm agent orchestration`, and `splunk/cribl pipeline tooling`. Reports are written under ignored `benchmark-results/`.
 
-`benchmarks/grep_evidence.json` contains short, linked evidence collected through Ken's Grep MCP. The standalone prototype imports that evidence because the MCP server connection belongs to the host application; the SaaS worker will replace this file boundary with the live MCP adapter.
-
-## Tests
+## Verification
 
 ```bash
+bun run format
+bun run check
+bun test
 python3 -m unittest discover -s tests -v
+printf '{"probes":["useState("]}' | bun run grep_mcp.ts
+git diff --check
 ```
 
 ## License

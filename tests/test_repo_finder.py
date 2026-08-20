@@ -82,15 +82,16 @@ class RepoFinderTests(unittest.TestCase):
         }
         with patch("repo_finder.create_search_plan", return_value=plan), patch(
             "repo_finder.fetch_queries", return_value=([], {})
-        ), patch("repo_finder.rank_candidates", return_value=[]), patch("sys.stderr") as stderr:
+        ), patch("repo_finder.rank_candidates", return_value=[]):
             result = repo_finder.run("request", 1, 1, None, None)
 
         self.assertEqual(result["original_request"], "request")
         self.assertEqual(result["search_plan"], plan)
-        self.assertEqual(result["static_evidence"], {"status": "not-provided", "candidate_count": 0})
-        self.assertTrue(
-            any("Static code evidence not provided" in str(call) for call in stderr.write.call_args_list)
+        self.assertEqual(
+            result["static_evidence"],
+            {"source": "file", "status": "not-provided", "candidate_count": 0},
         )
+        self.assertEqual(result["code_evidence"]["status"], "disabled")
 
     def test_github_search_ignores_forks_and_preserves_archived(self):
         payload = {
@@ -102,9 +103,32 @@ class RepoFinderTests(unittest.TestCase):
                     "language": "Python",
                     "archived": True,
                     "fork": False,
+                    "private": False,
+                    "license": {"spdx_id": "MIT"},
                     "updated_at": "2024-01-01T00:00:00Z",
                     "topics": ["diffusion"],
                     "stargazers_count": 0,
+                },
+                {
+                    "full_name": "owner/unlicensed",
+                    "html_url": "https://github.com/owner/unlicensed",
+                    "fork": False,
+                    "private": False,
+                    "license": {"spdx_id": "NOASSERTION"},
+                },
+                {
+                    "full_name": "owner/fake-license",
+                    "html_url": "https://github.com/owner/fake-license",
+                    "fork": False,
+                    "private": False,
+                    "license": {"spdx_id": "DefinitelyNotALicense"},
+                },
+                {
+                    "full_name": "owner/private",
+                    "html_url": "https://github.com/owner/private",
+                    "fork": False,
+                    "private": True,
+                    "license": {"spdx_id": "Apache-2.0"},
                 },
                 {
                     "full_name": "owner/fork",
@@ -118,6 +142,8 @@ class RepoFinderTests(unittest.TestCase):
         self.assertEqual([candidate.full_name for candidate in results], ["owner/kept"])
         self.assertTrue(results[0].archived)
         self.assertEqual(results[0].stars, 0)
+        self.assertEqual(results[0].license, "MIT")
+        self.assertTrue(results[0].public)
         self.assertEqual(results[0].github_queries, ["diffusion fork:false"])
 
     def test_request_waits_for_github_rate_limit_reset(self):
@@ -154,16 +180,148 @@ class RepoFinderTests(unittest.TestCase):
 
     def test_merge_combines_query_and_code_provenance(self):
         metadata = repo_finder.Candidate(
-            "owner/repo", "https://github.com/owner/repo", "desc", None, False, "", [], 0,
+            "owner/repo",
+            "https://github.com/owner/repo",
+            "desc",
+            None,
+            False,
+            "",
+            [],
+            0,
+            license="MIT",
+            public=True,
             github_queries=["query one"],
         )
         code = repo_finder.Candidate(
-            "OWNER/REPO", "https://github.com/owner/repo", None, None, False, "", [], 0,
-            grep_evidence=[{"probe": "Thing(", "snippet": "Thing()", "url": "https://github.com/owner/repo/blob/main/file.py"}],
+            "OWNER/REPO",
+            "https://github.com/owner/repo",
+            None,
+            None,
+            False,
+            "",
+            [],
+            0,
+            license="Apache-2.0",
+            public=True,
+            grep_evidence=[
+                {
+                    "probe": "Thing(",
+                    "snippet": "Thing()",
+                    "url": "https://github.com/owner/repo/blob/main/file.py",
+                }
+            ],
         )
         merged = list(repo_finder.merge_candidates([metadata, code]).values())
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0].evidence_type, "both")
+        self.assertEqual(merged[0].license, "MIT")
+        self.assertTrue(repo_finder.is_open_source(merged[0]))
+
+    def test_live_code_evidence_uses_argv_and_filters_environment(self):
+        probe = "useState("
+        response = {
+            "results": {
+                probe: [
+                    {
+                        "repo": "owner/repo",
+                        "file": "src/index.ts",
+                        "link": "https://github.com/owner/repo/blob/main/src/index.ts",
+                        "snippet": "1 │ useState()",
+                        "license": "MIT",
+                        "stars": 12,
+                        "updated_at": "2026-08-18",
+                    }
+                ]
+            },
+            "failures": {},
+        }
+        completed = Mock(returncode=0, stdout=json.dumps(response), stderr="")
+        environment = {
+            "PATH": "/usr/bin",
+            "GITHUB_TOKEN": "github-token",
+            "OPENAI_API_KEY": "must-not-cross-the-bridge",
+        }
+        with patch.dict(os.environ, environment, clear=True), patch(
+            "repo_finder.shutil.which", side_effect=["/usr/bin/bun", "/usr/bin/node"]
+        ), patch("repo_finder.subprocess.run", return_value=completed) as run_process:
+            candidates, status = repo_finder.load_live_code_evidence([probe], True)
+
+        self.assertEqual(status["status"], "loaded")
+        self.assertEqual(status["candidate_count"], 1)
+        self.assertEqual(candidates[0].license, "MIT")
+        self.assertEqual(candidates[0].grep_evidence[0]["source"], "kencode-search")
+        self.assertEqual(run_process.call_args.args[0][0:2], ["/usr/bin/bun", "run"])
+        self.assertNotIn("shell", run_process.call_args.kwargs)
+        self.assertNotIn("OPENAI_API_KEY", run_process.call_args.kwargs["env"])
+        self.assertEqual(run_process.call_args.kwargs["env"]["GITHUB_TOKEN"], "github-token")
+
+    def test_live_code_evidence_reports_no_matches_partial_and_error(self):
+        probes = ["First(", "Second("]
+        no_matches = Mock(
+            returncode=0,
+            stdout=json.dumps({"results": {probe: [] for probe in probes}, "failures": {}}),
+            stderr="",
+        )
+        partial = Mock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "results": {
+                        probes[0]: [
+                            {
+                                "repo": "owner/repo",
+                                "file": "file.py",
+                                "link": "https://github.com/owner/repo/blob/main/file.py",
+                                "snippet": "1 │ First()",
+                                "license": "Apache-2.0",
+                            }
+                        ]
+                    },
+                    "failures": {probes[1]: "timed out"},
+                }
+            ),
+            stderr="",
+        )
+        timeout = repo_finder.subprocess.TimeoutExpired(["bun"], 90)
+        with patch("repo_finder.shutil.which", side_effect=lambda name: f"/usr/bin/{name}"), patch(
+            "repo_finder.subprocess.run", side_effect=[no_matches, partial, timeout]
+        ):
+            _, no_match_status = repo_finder.load_live_code_evidence(probes, True)
+            candidates, partial_status = repo_finder.load_live_code_evidence(probes, True)
+            _, error_status = repo_finder.load_live_code_evidence(probes, True)
+
+        self.assertEqual(no_match_status["status"], "no-matches")
+        self.assertEqual(partial_status["status"], "partial")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(partial_status["failures"], {probes[1]: "timed out"})
+        self.assertEqual(error_status["status"], "error")
+        self.assertIn("timed out", error_status["failures"]["bridge"])
+
+    def test_live_code_evidence_rejects_malformed_or_unlicensed_bridge_rows(self):
+        probe = "Thing("
+        response = {
+            "results": {
+                probe: [
+                    {
+                        "repo": "owner/repo",
+                        "file": "file.py",
+                        "link": "https://github.com/owner/repo/blob/main/file.py",
+                        "snippet": "1 │ Thing()",
+                        "license": "NOASSERTION",
+                    }
+                ]
+            },
+            "failures": {},
+        }
+        completed = Mock(returncode=0, stdout=json.dumps(response), stderr="")
+        with patch("repo_finder.shutil.which", side_effect=lambda name: f"/usr/bin/{name}"), patch(
+            "repo_finder.subprocess.run", return_value=completed
+        ):
+            candidates, status = repo_finder.load_live_code_evidence([probe], True)
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(status["status"], "error")
+        self.assertIn("unlicensed", status["failures"]["bridge"])
 
     def test_rank_candidates_requests_fifth_grade_explanations(self):
         candidate = repo_finder.Candidate(
@@ -209,6 +367,43 @@ class RepoFinderTests(unittest.TestCase):
             results = repo_finder.load_grep_evidence(path, "topic")
         self.assertEqual(len(results), 1)
         self.assertEqual(len(results[0].grep_evidence[0]["snippet"]), 500)
+        self.assertEqual(results[0].grep_evidence[0]["source"], "file")
+        self.assertIsNone(results[0].license)
+        self.assertFalse(repo_finder.is_open_source(results[0]))
+
+    def test_run_loads_but_does_not_rank_unlicensed_static_evidence(self):
+        plan = {
+            "original_request": "topic",
+            "interpretations": ["meaning"],
+            "technical_concepts": ["concept"],
+            "github_queries": ["concept fork:false"],
+            "code_probes": ["Concept("],
+        }
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "evidence.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "topic": [
+                            {
+                                "full_name": "owner/repo",
+                                "url": "https://github.com/owner/repo/blob/main/file.py",
+                                "probe": "Concept(",
+                                "snippet": "Concept()",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("repo_finder.create_search_plan", return_value=plan), patch(
+                "repo_finder.fetch_queries", return_value=([], {})
+            ), patch("repo_finder.rank_candidates", return_value=[]) as rank_candidates:
+                result = repo_finder.run("topic", 1, 1, None, path)
+
+        self.assertEqual(result["static_evidence"]["status"], "loaded")
+        self.assertEqual(result["candidate_count"], 0)
+        self.assertEqual(rank_candidates.call_args.args[1], [])
 
     def test_model_json_requires_a_provider_key(self):
         with patch.dict(os.environ, {}, clear=True):

@@ -8,11 +8,17 @@
     "dev": "bun --watch server.ts",
     "start": "bun server.ts",
     "check": "biome check . && tsc --noEmit",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "test:ts": "bun test tests/*.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",
     "@types/bun": "1.3.14",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@kenkaiiii/kencode-search": "0.1.18",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "spdx-license-ids": "3.0.23"
   }
 }
