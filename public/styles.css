@@ -596,6 +596,111 @@ button:disabled {
   text-underline-offset: 3px;
 }
 
+.scoring-note,
+.saved-searches-note {
+  max-width: 780px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.result-actions[hidden],
+.result-actions button[hidden] {
+  display: none;
+}
+
+.action-status {
+  min-height: 22px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.score-details {
+  max-width: 780px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.score-details summary {
+  min-height: 44px;
+  padding: 11px 14px;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.score-details dl {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px;
+}
+
+.score-details dt {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.score-details dd {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.saved-searches {
+  margin-top: 34px;
+  border-top: 1px solid var(--line-strong);
+  padding-block: 28px 60px;
+}
+
+.saved-searches-list {
+  display: grid;
+  max-width: 780px;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-search-button {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+}
+
+.saved-search-button:hover {
+  border-color: var(--ink);
+}
+
+.saved-search-button span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .empty-state {
   max-width: 700px;
 }
@@ -751,6 +856,21 @@ button:disabled {
 
   .result-rank {
     font-size: 12px;
+  }
+
+  .result-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-actions .secondary-button {
+    width: 100%;
+  }
+
+  .saved-search-button {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .settings-main {

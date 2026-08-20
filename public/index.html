@@ -7,7 +7,7 @@
     <meta name="description" content="Recall-first repository discovery with visible search evidence." />
     <title>Ghitty</title>
     <link rel="stylesheet" href="/styles.css" />
-    <script src="/app.js" defer></script>
+    <script type="module" src="/app.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to search</a>
@@ -121,7 +121,29 @@
           </div>
           <p id="result-count" class="result-count"></p>
         </div>
+        <p class="scoring-note">
+          Scores use concept relevance (30), GitHub query coverage (30), code evidence (30), and
+          maintenance (10). Stars do not affect ranking.
+        </p>
+        <div id="result-actions" class="result-actions" hidden>
+          <button id="toggle-results" class="secondary-button" type="button" hidden></button>
+          <button id="save-search" class="secondary-button" type="button">Save in this browser</button>
+          <button id="export-search" class="secondary-button" type="button">Export JSON</button>
+        </div>
+        <p id="result-action-status" class="action-status" role="status" aria-live="polite"></p>
         <div id="results" class="results"></div>
+      </section>
+
+      <section class="saved-searches" aria-labelledby="saved-searches-title">
+        <div class="section-heading">
+          <div>
+            <p class="context">Browser-local</p>
+            <h2 id="saved-searches-title">Saved searches</h2>
+          </div>
+        </div>
+        <p class="saved-searches-note">Saved searches disappear if this site's browser data is cleared. Export JSON for a portable copy.</p>
+        <p id="saved-searches-status" class="action-status" role="status" aria-live="polite"></p>
+        <ol id="saved-searches-list" class="saved-searches-list"></ol>
       </section>
 
       <section id="empty-state" class="empty-state" aria-labelledby="empty-title">

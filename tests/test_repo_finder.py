@@ -345,6 +345,140 @@ class RepoFinderTests(unittest.TestCase):
         self.assertIn("fifth-grade reader", model_json.call_args.args[0])
         self.assertIn("exactly two short", model_json.call_args.args[0])
 
+    def test_ranking_record_bounds_untrusted_model_context(self):
+        candidate = repo_finder.Candidate(
+            "owner/repo",
+            "https://github.com/owner/repo",
+            "d" * 2_000,
+            "Python",
+            False,
+            "2026-08-01T00:00:00Z",
+            [f"topic-{index}" for index in range(30)],
+            1,
+            github_queries=[f"query-{index}" for index in range(20)],
+            grep_evidence=[
+                {
+                    "probe": "p" * 500,
+                    "snippet": "s" * 10_000,
+                    "url": "https://github.com/owner/repo/blob/main/file.py",
+                    "source": "kencode-search",
+                }
+                for _ in range(5)
+            ],
+        )
+
+        record = candidate.ranking_record()
+
+        self.assertEqual(len(record["description"]), 500)
+        self.assertEqual(len(record["topics"]), 20)
+        self.assertEqual(len(record["github_queries"]), 10)
+        self.assertEqual(len(record["grep_evidence"]), 3)
+        self.assertEqual(len(record["grep_evidence"][0]["probe"]), 256)
+        self.assertEqual(len(record["grep_evidence"][0]["snippet"]), repo_finder.MAX_MODEL_SNIPPET_CHARS)
+
+    def test_score_candidate_awards_exact_components(self):
+        plan = {
+            "interpretations": [],
+            "technical_concepts": ["image diffusion"],
+        }
+        candidate = repo_finder.Candidate(
+            "owner/image-tool",
+            "https://github.com/owner/image-tool",
+            "Image utilities",
+            "Python",
+            False,
+            "2026-08-01T00:00:00Z",
+            ["diffusion"],
+            999999,
+            github_queries=["query one", "query two", "QUERY TWO"],
+            grep_evidence=[
+                {"probe": "DiffusionPipeline(", "snippet": "", "url": ""},
+                {"probe": "model_index.json", "snippet": "", "url": ""},
+                {"probe": "MODEL_INDEX.JSON", "snippet": "", "url": ""},
+            ],
+        )
+
+        score = repo_finder.score_candidate("image", plan, candidate)
+
+        self.assertEqual(score["score_breakdown"]["concept_relevance"]["points"], 30)
+        self.assertEqual(score["score_breakdown"]["github_query_coverage"]["points"], 20)
+        self.assertEqual(score["score_breakdown"]["code_evidence"]["points"], 30)
+        self.assertEqual(score["score_breakdown"]["maintenance"]["points"], 10)
+        self.assertEqual(score["score"], 90)
+        self.assertEqual(score["score_max"], 100)
+
+    def test_score_candidates_orders_ties_by_case_insensitive_name(self):
+        plan = {"interpretations": [], "technical_concepts": []}
+        candidates = [
+            repo_finder.Candidate("z/repo", "https://github.com/z/repo", None, None, True, "", [], 0),
+            repo_finder.Candidate("A/repo", "https://github.com/A/repo", None, None, True, "", [], 50),
+        ]
+
+        ranked = repo_finder.score_candidates("unmatched", plan, candidates)
+
+        self.assertEqual([candidate.full_name for candidate, _ in ranked], ["A/repo", "z/repo"])
+
+    def test_rank_candidates_preserves_supplied_order_when_model_reorders(self):
+        candidates = [
+            repo_finder.Candidate("a/first", "https://github.com/a/first", "First", None, False, "", [], 0),
+            repo_finder.Candidate("b/second", "https://github.com/b/second", "Second", None, False, "", [], 0),
+        ]
+        response = {
+            "picks": [
+                {"full_name": "b/second", "why": "Second.", "role": "tool", "match": "focused", "translated_description": None},
+                {"full_name": "a/first", "why": "First.", "role": "tool", "match": "focused", "translated_description": None},
+            ]
+        }
+
+        with patch("repo_finder.model_json", return_value=response):
+            picks = repo_finder.rank_candidates("topic", candidates, 2, None)
+
+        self.assertEqual([pick["full_name"] for pick in picks], ["a/first", "b/second"])
+
+    def test_run_returns_all_scored_results_and_compatible_top_picks(self):
+        plan = {
+            "original_request": "topic",
+            "interpretations": ["topic"],
+            "technical_concepts": ["topic"],
+            "github_queries": ["topic fork:false"],
+            "code_probes": ["Topic("],
+        }
+        candidates = [
+            repo_finder.Candidate(
+                f"owner/repo-{index}",
+                f"https://github.com/owner/repo-{index}",
+                "topic",
+                "Python",
+                False,
+                "2026-08-01T00:00:00Z",
+                ["topic"],
+                index,
+                license="MIT",
+                public=True,
+                github_queries=["topic fork:false"],
+            )
+            for index in range(12)
+        ]
+        explanation = {
+            "full_name": "owner/repo-0",
+            "why": "It helps. It matches.",
+            "role": "tool",
+            "match": "focused",
+            "translated_description": None,
+        }
+        with patch("repo_finder.create_search_plan", return_value=plan), patch(
+            "repo_finder.fetch_queries", side_effect=[(candidates, {}), ([], {})]
+        ), patch("repo_finder.discover_queries", return_value={"github_queries": ["second fork:false"], "reason": ""}), patch(
+            "repo_finder.load_live_code_evidence", return_value=([], {"status": "disabled", "candidate_count": 0, "failures": {}})
+        ), patch("repo_finder.rank_candidates", return_value=[{**explanation, "repository": candidates[0]}]):
+            result = repo_finder.run("topic", 25, 10, None, None)
+
+        self.assertEqual(len(result["results"]), 12)
+        self.assertEqual(len(result["picks"]), 10)
+        self.assertEqual(result["picks"], result["results"][:10])
+        self.assertEqual(result["results"][0]["score_max"], 100)
+        self.assertIn("score_breakdown", result["results"][0])
+
     def test_load_grep_evidence_rejects_bad_rows_and_bounds_snippets(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "evidence.json"

@@ -46,6 +46,19 @@ ghitty "image generation" --live-mcp
 
 Keys are read only from environment variables. `REPO_FINDER_PROVIDER` accepts `openai` or `openrouter`; automatic selection prefers OpenAI when both keys exist. Output is JSON; query progress and skipped requests go to stderr. Omit `--live-mcp` only for an intentional metadata-only run.
 
+## Scores, all results, save, and export
+
+Every eligible repository receives a deterministic score out of 100 before the model writes explanations:
+
+- concept relevance: 30 points
+- distinct GitHub query coverage: 30 points
+- distinct code-probe evidence: 30 points
+- maintenance state: 10 points
+
+Stars never affect ranking. Results sort by score, then repository name for ties. The web app shows the top 10 by default and can expand to every scored candidate, up to the 100-candidate safety cap; each card exposes its factual score breakdown.
+
+Completed searches can be saved in IndexedDB in the current browser and reopened without a network request. Browser-local saves disappear when site data is cleared. **Export JSON** downloads the same versioned snapshot as a portable copy; saving first is not required.
+
 ## Evidence and open-source gate
 
 `create_search_plan()` emits 3–10 validated literal probes. Python sends one bounded JSON request to
